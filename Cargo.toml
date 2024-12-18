@@ -1,0 +1,17 @@
+[package]
+name = "warehousebot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustyline = "^15.0"
+
+
+[lib]
+name = "warehousebot"
+path = "src/lib.rs"
+
+
+[features]
+default = ["with-file-history"]
+with-file-history = []
