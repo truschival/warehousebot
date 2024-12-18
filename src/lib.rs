@@ -1,3 +1,5 @@
+use log::{error, info, warn};
+
 pub mod botcommands {
 
     #[derive(Debug)]
