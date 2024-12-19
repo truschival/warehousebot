@@ -3,8 +3,8 @@ use rustyline::error::ReadlineError;
 use rustyline::{Cmd, DefaultEditor, KeyEvent};
 use simple_logger::SimpleLogger;
 
-use warehousebot::botcommands;
-use warehousebot::botcommands::Command;
+use warehousebot::botcommands::MockHandler;
+use warehousebot::cli::{Cli, CliError};
 
 fn main() -> rustyline::Result<()> {
     SimpleLogger::new()
@@ -17,10 +17,14 @@ fn main() -> rustyline::Result<()> {
     rl.set_edit_mode(rustyline::EditMode::Emacs);
     rl.bind_sequence(KeyEvent::ctrl('s'), Cmd::HistorySearchForward);
     rl.bind_sequence(KeyEvent::ctrl('r'), Cmd::HistorySearchBackward);
+
     #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
+
+    let executor = MockHandler {};
+    let cli = Cli::new(executor);
 
     loop {
         let readline = rl.readline(">> ");
@@ -30,16 +34,20 @@ fn main() -> rustyline::Result<()> {
                     continue;
                 }
 
-                rl.add_history_entry(line.as_str())?;
-                println!("Line: {}", line);
-
-                match botcommands::command_for_string(&line) {
-                    Ok(cmd) => {
-                        println!("ok, executing {:?}", cmd.info());
-                        cmd.execute()
+                match cli.dispatch_command_for_string(&line) {
+                    Ok(res) => {
+                        println!("Success {}", res);
+                        // only add successful commands to history
+                        rl.add_history_entry(line.as_str())?;
                     }
-                    Err(e) => {
-                        println!("Bad Error {:?}", e);
+                    Err(CliError::CommandFailed(msg)) => {
+                        println!("Command failed with {}", msg);
+                    }
+                    Err(CliError::CommandNotImplemented) => {
+                        println!("Command not implemented");
+                    }
+                    Err(_) => {
+                        println!("Generic Error")
                     }
                 }
             }
