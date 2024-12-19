@@ -3,6 +3,18 @@ use log::{error, info, warn};
 pub mod botcommands {
 
     #[derive(Debug)]
+    pub enum CommandError {
+        HitWall,
+        StoreageFull,
+    }
+
+    //
+    pub trait BotCommands {
+        fn go_north() -> Result<(), CommandError>;
+        fn go_south() -> Result<(), CommandError>;
+    }
+
+    #[derive(Debug)]
     pub enum CliError {
         CommandUnknown,
         CommandNotImplemented,
@@ -11,8 +23,14 @@ pub mod botcommands {
     pub fn command_for_string(cmd: &str) -> Result<impl Command, CliError> {
         let cmd = cmd.to_uppercase();
         match cmd.trim() {
-            "NORTH" => Ok(GoSouth::new()),
-            "SOUTH" => Ok(GoSouth::new()),
+            "NORTH" => {
+                log::debug!("norden");
+                Ok(GoSouth::new())
+            }
+            "SOUTH" => {
+                log::debug!("Süden");
+                Ok(GoSouth::new())
+            }
             "WEST" | "East" => Err(CliError::CommandNotImplemented),
             "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),
             _ => Err(CliError::CommandUnknown),
