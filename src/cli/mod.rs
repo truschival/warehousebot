@@ -1,6 +1,5 @@
-use log::debug;
-
 use super::botcommands::{BotCommands, CommandError};
+use log::debug;
 
 pub struct Cli<T> {
     executor: T,
@@ -15,8 +14,22 @@ pub enum CliError {
 
 fn command_error_to_cli_error(err: CommandError) -> CliError {
     match err {
-        CommandError::HitWall => CliError::CommandFailed("hit the wall".to_string()),
-        CommandError::StoreageFull => CliError::CommandFailed("storage full".to_string()),
+        CommandError::HitWall => CliError::CommandFailed("Bot hit a wall".to_string()),
+        CommandError::StoreageFull => CliError::CommandFailed("Storage full".to_string()),
+        CommandError::ScanFailed => CliError::CommandFailed("Scan failed".to_string()),
+        CommandError::ClientError => {
+            CliError::CommandFailed("Something is really bad - better abort".to_string())
+        }
+    }
+}
+
+fn process_navigation_command(
+    res: Result<(), CommandError>,
+    direction: &str,
+) -> Result<String, CliError> {
+    match res {
+        Ok(_) => Ok(format!("going {direction}")),
+        Err(e) => Err(command_error_to_cli_error(e)),
     }
 }
 
@@ -27,29 +40,12 @@ impl<T: BotCommands> Cli<T> {
 
     pub fn dispatch_command_for_string(&self, cmd: &str) -> Result<String, CliError> {
         let cmd = cmd.to_uppercase();
-        match cmd.trim() {
-            "NORTH" => {
-                debug!("norden");
-
-                match self.executor.go_north() {
-                    Ok(_) => {
-                        debug!("Go North worked");
-                        Ok("going north".to_string())
-                    }
-                    Err(e) => Err(command_error_to_cli_error(e)),
-                }
-            }
-            "WEST" => {
-                debug!("West");
-                match self.executor.go_west() {
-                    Ok(_) => {
-                        debug!("Go West worked");
-                        Ok("going west".to_string())
-                    }
-                    Err(e) => Err(command_error_to_cli_error(e)),
-                }
-            }
-            "SOUTH" | "East" => Err(CliError::CommandNotImplemented),
+        let cmd = cmd.trim();
+        match cmd {
+            "NORTH" => process_navigation_command(self.executor.go_north(), cmd),
+            "WEST" => process_navigation_command(self.executor.go_west(), cmd),
+            "SOUTH" => process_navigation_command(self.executor.go_south(), cmd),
+            "EAST" => process_navigation_command(self.executor.go_east(), cmd),
             "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),
             _ => Err(CliError::CommandUnknown),
         }

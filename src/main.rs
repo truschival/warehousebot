@@ -1,15 +1,17 @@
+use colored::Colorize;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::{Cmd, DefaultEditor, KeyEvent};
 use simple_logger::SimpleLogger;
-
-use warehousebot::botcommands::MockHandler;
+use warehousebot::botcommands::rest::RestBot;
+use warehousebot::botcommands::MockBot;
 use warehousebot::cli::{Cli, CliError};
 
 fn main() -> rustyline::Result<()> {
     SimpleLogger::new()
         .without_timestamps()
         .with_module_level("rustyline", log::LevelFilter::Error)
+        .with_module_level("reqwest", log::LevelFilter::Info)
         .init()
         .expect("Logger not initialized!");
 
@@ -23,7 +25,7 @@ fn main() -> rustyline::Result<()> {
         println!("No previous history.");
     }
 
-    let executor = MockHandler {};
+    let executor = RestBot::default();
     let cli = Cli::new(executor);
 
     loop {
@@ -41,13 +43,13 @@ fn main() -> rustyline::Result<()> {
                         rl.add_history_entry(line.as_str())?;
                     }
                     Err(CliError::CommandFailed(msg)) => {
-                        println!("Command failed with {}", msg);
+                        println!("{}{}", "Command failed : ".red(), msg);
                     }
                     Err(CliError::CommandNotImplemented) => {
-                        println!("Command not implemented");
+                        println!("{}", "Command not yet implemented".yellow());
                     }
-                    Err(_) => {
-                        println!("Generic Error")
+                    Err(CliError::CommandUnknown) => {
+                        println!("{}", "Unknown command".yellow());
                     }
                 }
             }
