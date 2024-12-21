@@ -1,6 +1,6 @@
 pub mod cli;
 
-pub mod botcommands {
+pub mod bot {
     use log::debug;
     use std::collections::HashMap;
 
@@ -14,7 +14,7 @@ pub mod botcommands {
         ClientError,
     }
     //
-    pub trait BotCommands {
+    pub trait Commands {
         fn go_north(&self) -> Result<(), CommandError>;
         fn go_south(&self) -> Result<(), CommandError>;
         fn go_west(&self) -> Result<(), CommandError>;
@@ -49,7 +49,7 @@ pub mod botcommands {
         }
     }
 
-    impl BotCommands for MockBot {
+    impl Commands for MockBot {
         fn go_east(&self) -> Result<(), CommandError> {
             debug!("go_east");
             Ok(())

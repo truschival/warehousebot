@@ -1,4 +1,4 @@
-use super::botcommands::{BotCommands, CommandError};
+use super::bot::{CommandError, Commands};
 use log::debug;
 
 pub struct Cli<T> {
@@ -33,7 +33,7 @@ fn process_navigation_command(
     }
 }
 
-impl<T: BotCommands> Cli<T> {
+impl<T: Commands> Cli<T> {
     pub fn new(ex: T) -> Self {
         Cli { executor: ex }
     }

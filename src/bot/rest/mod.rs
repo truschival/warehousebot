@@ -1,4 +1,4 @@
-use super::{BotCommands, CommandError};
+use super::{CommandError, Commands};
 use log::{debug, error, warn};
 use reqwest;
 
@@ -47,7 +47,7 @@ impl Default for RestBot {
     }
 }
 
-impl BotCommands for RestBot {
+impl Commands for RestBot {
     fn go_east(&self) -> Result<(), CommandError> {
         debug!("go_east");
         self.navigate("east")

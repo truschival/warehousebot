@@ -3,8 +3,8 @@ use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::{Cmd, DefaultEditor, KeyEvent};
 use simple_logger::SimpleLogger;
-use warehousebot::botcommands::rest::RestBot;
-use warehousebot::botcommands::MockBot;
+use warehousebot::bot::rest::RestBot;
+use warehousebot::bot::MockBot;
 use warehousebot::cli::{Cli, CliError};
 
 fn main() -> rustyline::Result<()> {
