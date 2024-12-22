@@ -2,14 +2,22 @@ pub mod cli;
 
 pub mod warehouse;
 
+pub mod directions {
+    pub const NORTH: &str = "north";
+    pub const WEST: &str = "west";
+    pub const EAST: &str = "east";
+    pub const SOUTH: &str = "south";
+}
+
 pub mod bot {
+    use crate::directions::{EAST, NORTH, SOUTH, WEST};
     use log::debug;
     use std::collections::HashMap;
 
     pub mod rest;
 
-    #[derive(Debug)]
-    pub enum CommandError {
+    #[derive(Debug, PartialEq)]
+    pub enum Error {
         HitWall,
         StoreageFull,
         ScanFailed,
@@ -17,13 +25,13 @@ pub mod bot {
     }
     //
     pub trait Commands {
-        fn go_north(&self) -> Result<(), CommandError>;
-        fn go_south(&self) -> Result<(), CommandError>;
-        fn go_west(&self) -> Result<(), CommandError>;
-        fn go_east(&self) -> Result<(), CommandError>;
+        fn go_north(&self) -> Result<(), Error>;
+        fn go_south(&self) -> Result<(), Error>;
+        fn go_west(&self) -> Result<(), Error>;
+        fn go_east(&self) -> Result<(), Error>;
 
-        fn scan_near(&self) -> Result<(), CommandError>;
-        fn reset(&self) -> Result<(), CommandError>;
+        fn scan_near(&self) -> Result<(), Error>;
+        fn reset(&self) -> Result<(), Error>;
     }
 
     pub struct MockBot {
@@ -36,10 +44,10 @@ pub mod bot {
             Self {
                 bot: "paul".to_string(),
                 call_count: HashMap::from([
-                    ("north".to_string(), 0),
-                    ("west".to_string(), 0),
-                    ("south".to_string(), 0),
-                    ("east".to_string(), 0),
+                    (NORTH.to_string(), 0),
+                    (WEST.to_string(), 0),
+                    (SOUTH.to_string(), 0),
+                    (EAST.to_string(), 0),
                 ]),
             }
         }
@@ -52,32 +60,32 @@ pub mod bot {
     }
 
     impl Commands for MockBot {
-        fn go_east(&self) -> Result<(), CommandError> {
+        fn go_east(&self) -> Result<(), Error> {
             debug!("go_east");
             Ok(())
         }
 
-        fn go_north(&self) -> Result<(), CommandError> {
+        fn go_north(&self) -> Result<(), Error> {
             debug!("go_north");
             Ok(())
         }
 
-        fn go_south(&self) -> Result<(), CommandError> {
+        fn go_south(&self) -> Result<(), Error> {
             debug!("go_south");
             Ok(())
         }
 
-        fn go_west(&self) -> Result<(), CommandError> {
+        fn go_west(&self) -> Result<(), Error> {
             debug!("go_west");
-            Err(CommandError::HitWall)
+            Err(Error::HitWall)
         }
 
-        fn scan_near(&self) -> Result<(), CommandError> {
+        fn scan_near(&self) -> Result<(), Error> {
             debug!("Scan Near");
-            Err(CommandError::ScanFailed)
+            Err(Error::ScanFailed)
         }
 
-        fn reset(&self) -> Result<(), CommandError> {
+        fn reset(&self) -> Result<(), Error> {
             debug!("Reset Bot");
             Ok(())
         }

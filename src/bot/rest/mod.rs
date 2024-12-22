@@ -1,4 +1,5 @@
-use super::{CommandError, Commands};
+use super::{Commands, Error};
+use crate::directions::{EAST, NORTH, SOUTH, WEST};
 use log::{debug, error, warn};
 use reqwest;
 
@@ -12,7 +13,7 @@ impl RestBot {
         Self { bot, base_url }
     }
 
-    fn navigate(&self, direction: &str) -> Result<(), CommandError> {
+    fn navigate(&self, direction: &str) -> Result<(), Error> {
         let client = reqwest::blocking::Client::new();
         let res = client
             .put(format!("{}/{}/move/{direction}", self.base_url, self.bot))
@@ -24,15 +25,15 @@ impl RestBot {
                     200 => Ok(()),
                     404 => {
                         warn!("No such bot!");
-                        Err(CommandError::ClientError)
+                        Err(Error::ClientError)
                     }
-                    405 => Err(CommandError::HitWall),
-                    _ => Err(CommandError::ClientError),
+                    405 => Err(Error::HitWall),
+                    _ => Err(Error::ClientError),
                 }
             }
             Err(e) => {
                 error!("Error occured: {:?} - {}", e.status(), e.to_string());
-                Err(CommandError::ClientError)
+                Err(Error::ClientError)
             }
         }
     }
@@ -48,32 +49,32 @@ impl Default for RestBot {
 }
 
 impl Commands for RestBot {
-    fn go_east(&self) -> Result<(), CommandError> {
+    fn go_east(&self) -> Result<(), Error> {
         debug!("go_east");
-        self.navigate("east")
+        self.navigate(EAST)
     }
 
-    fn go_north(&self) -> Result<(), CommandError> {
+    fn go_north(&self) -> Result<(), Error> {
         debug!("go_north");
-        self.navigate("north")
+        self.navigate(NORTH)
     }
 
-    fn go_south(&self) -> Result<(), CommandError> {
+    fn go_south(&self) -> Result<(), Error> {
         debug!("go_south");
-        self.navigate("south")
+        self.navigate(SOUTH)
     }
 
-    fn go_west(&self) -> Result<(), CommandError> {
+    fn go_west(&self) -> Result<(), Error> {
         debug!("go_west");
-        self.navigate("west")
+        self.navigate(WEST)
     }
 
-    fn scan_near(&self) -> Result<(), CommandError> {
+    fn scan_near(&self) -> Result<(), Error> {
         debug!("Scan Near");
-        Err(CommandError::ScanFailed)
+        Err(Error::ScanFailed)
     }
 
-    fn reset(&self) -> Result<(), CommandError> {
+    fn reset(&self) -> Result<(), Error> {
         debug!("Reset Bot");
         Ok(())
     }

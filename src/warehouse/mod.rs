@@ -1,8 +1,16 @@
+use crate::directions::{EAST, NORTH, SOUTH, WEST};
 use log::debug;
 use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct Wall {}
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    CellInvalid,
+    GoodsIncompatible,
+    StorageExceeded,
+}
 
 #[derive(PartialEq, Debug)]
 pub struct Coords2D(i32, i32);
@@ -19,7 +27,7 @@ pub enum CellType {
 pub struct Cell {
     pub pos: Coords2D,
     pub walls: HashMap<String, Wall>,
-    pub goods_stored: String,
+    shelf_inventory: Vec<String>,
     visited: bool,
     cell_type: CellType,
 }
@@ -37,9 +45,9 @@ impl std::fmt::Display for Cell {
             "Cell: ({}, {}) - Storage ({}/{}) - Goods: {}",
             self.pos.0,
             self.pos.1,
-            self.space_allocated(),
-            self.capacity(),
-            self.goods_stored
+            self.occupied_storage(),
+            self.storage_capacity(),
+            self.stored_good_type()
         )
     }
 }
@@ -50,7 +58,7 @@ impl Cell {
         Self {
             pos,
             walls: HashMap::new(),
-            goods_stored: String::new(),
+            shelf_inventory: Vec::new(),
             visited: false,
             cell_type: CellType::XCross,
         }
@@ -77,23 +85,23 @@ impl Cell {
                 debug!("Found one wall on the {} side, adding {}", firstwall, side);
                 // are we building a corner or hallway?
                 match firstwall {
-                    "south" | "north" => match side {
-                        "west" | "east" => {
+                    SOUTH | NORTH => match side {
+                        WEST | EAST => {
                             debug!("Its a Corner!");
                             self.cell_type = CellType::Corner;
                         }
-                        "south" | "north" => {
+                        SOUTH | NORTH => {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
                         _ => panic!("illegal side for wall: {side}"),
                     },
-                    "west" | "east" => match side {
-                        "south" | "north" => {
+                    WEST | EAST => match side {
+                        SOUTH | NORTH => {
                             debug!("Its a Corner!");
                             self.cell_type = CellType::Corner;
                         }
-                        "west" | "east" => {
+                        WEST | EAST => {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
@@ -119,17 +127,36 @@ impl Cell {
         self.visited = true;
     }
 
-    pub fn space_allocated(&self) -> i32 {
-        3
+    pub fn occupied_storage(&self) -> usize {
+        self.shelf_inventory.len()
     }
 
-    pub fn capacity(&self) -> i32 {
+    pub fn storage_capacity(&self) -> usize {
         match self.cell_type {
             CellType::XCross => 4,
             CellType::TCross => 6,
             CellType::Hallway => 8,
             CellType::Corner => 9,
             CellType::DeadEnd => 12,
+        }
+    }
+
+    pub fn put_good_on_shelf(&mut self, good: String) -> Result<usize, Error> {
+        if !self.shelf_inventory.is_empty() && self.shelf_inventory[0] != good {
+            return Err(Error::GoodsIncompatible);
+        }
+        if self.shelf_inventory.len() == self.storage_capacity() {
+            return Err(Error::StorageExceeded);
+        }
+        self.shelf_inventory.push(good);
+        Ok(self.occupied_storage())
+    }
+
+    pub fn stored_good_type(&self) -> &str {
+        if let Some(good) = self.shelf_inventory.get(0) {
+            good
+        } else {
+            "-"
         }
     }
 }
@@ -145,7 +172,7 @@ mod tests {
         assert_eq!(c.pos.1, 2);
         assert_eq!(c.walls.len(), 0);
         assert!(!c.was_visited());
-        assert_eq!(c.capacity(), 4);
+        assert_eq!(c.storage_capacity(), 4);
     }
 
     #[test]
@@ -160,20 +187,20 @@ mod tests {
         let mut c = Cell::new(Coords2D(1, 2));
         assert_eq!(c.cell_type, CellType::XCross);
 
-        c.add_wall("south");
+        c.add_wall(SOUTH);
         assert_eq!(c.cell_type, CellType::TCross);
-        assert_eq!(c.capacity(), 6);
+        assert_eq!(c.storage_capacity(), 6);
 
-        c.add_wall("north");
+        c.add_wall(NORTH);
         assert_eq!(c.cell_type, CellType::Hallway);
-        assert_eq!(c.capacity(), 8);
+        assert_eq!(c.storage_capacity(), 8);
 
-        c.add_wall("east");
+        c.add_wall(EAST);
         assert_eq!(c.cell_type, CellType::DeadEnd);
-        assert_eq!(c.capacity(), 12);
+        assert_eq!(c.storage_capacity(), 12);
 
         assert_eq!(c.walls.len(), 3);
-        if let None = c.walls.get("south") {
+        if let None = c.walls.get(SOUTH) {
             assert!(false);
         }
     }
@@ -182,22 +209,24 @@ mod tests {
     fn test_cell_build_corner() {
         let mut c = Cell::new(Coords2D(1, 2));
 
-        c.add_wall("south");
+        c.add_wall(SOUTH);
         assert_eq!(c.cell_type, CellType::TCross);
-        assert_eq!(c.capacity(), 6);
+        assert_eq!(c.storage_capacity(), 6);
 
-        c.add_wall("east");
+        c.add_wall(EAST);
         assert_eq!(c.cell_type, CellType::Corner);
-        assert_eq!(c.capacity(), 9);
+        assert_eq!(c.storage_capacity(), 9);
 
         let mut c2 = Cell::new(Coords2D(2, 3));
-        c2.add_wall("east");
+        c2.add_wall(EAST);
         assert_eq!(c2.cell_type, CellType::TCross);
-        assert_eq!(c2.capacity(), 6);
+        assert_eq!(c2.storage_capacity(), 6);
 
-        c2.add_wall("south");
+        c2.add_wall(SOUTH);
         assert_eq!(c.cell_type, CellType::Corner);
-        assert_eq!(c.capacity(), 9);
+        assert_eq!(c.storage_capacity(), 9);
+
+        println!("{}", c);
     }
 
     #[test]
@@ -205,19 +234,19 @@ mod tests {
     fn test_build_box_panic() {
         let mut c = Cell::new(Coords2D(1, 2));
 
-        c.add_wall("west");
+        c.add_wall(WEST);
         assert_eq!(c.cell_type, CellType::TCross);
-        assert_eq!(c.capacity(), 6);
+        assert_eq!(c.storage_capacity(), 6);
 
-        c.add_wall("north");
+        c.add_wall(NORTH);
         assert_eq!(c.cell_type, CellType::Corner);
-        assert_eq!(c.capacity(), 9);
+        assert_eq!(c.storage_capacity(), 9);
 
-        c.add_wall("east");
+        c.add_wall(EAST);
         assert_eq!(c.cell_type, CellType::DeadEnd);
-        assert_eq!(c.capacity(), 12);
+        assert_eq!(c.storage_capacity(), 12);
 
-        c.add_wall("south");
+        c.add_wall(SOUTH);
     }
 
     #[test]
@@ -226,5 +255,37 @@ mod tests {
         let mut c = Cell::new(Coords2D(1, 2));
         c.add_wall("south");
         c.add_wall("south");
+    }
+
+    #[test]
+    fn test_add_items_ok() {
+        let mut c = Cell::new(Coords2D(1, 2));
+        assert_eq!(c.stored_good_type(), "-");
+        assert_eq!(c.occupied_storage(), 0);
+        assert_eq!(c.storage_capacity(), 4);
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        assert_eq!(c.occupied_storage(), 1);
+        assert_eq!(c.stored_good_type(), "Kürbis");
+    }
+
+    #[test]
+    fn test_add_items_fail_full() {
+        let mut c = Cell::new(Coords2D(1, 2));
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_err());
+        assert_eq!(c.occupied_storage(), c.storage_capacity());
+    }
+
+    #[test]
+    fn test_add_items_fail_mixed_goods() {
+        let mut c = Cell::new(Coords2D(1, 2));
+        assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
+        let e = c.put_good_on_shelf("Milch".to_string());
+        assert!(e.is_err());
+        assert_eq!(e.unwrap_err(), Error::GoodsIncompatible);
+        assert_eq!(c.occupied_storage(), 1);
     }
 }
