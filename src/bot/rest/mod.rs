@@ -1,5 +1,5 @@
 use super::{Commands, Error};
-use crate::directions::{EAST, NORTH, SOUTH, WEST};
+use crate::{direction_to_literal, Direction};
 use log::{debug, error, warn};
 use reqwest;
 
@@ -13,10 +13,16 @@ impl RestBot {
         Self { bot, base_url }
     }
 
-    fn navigate(&self, direction: &str) -> Result<(), Error> {
+    fn navigate(&self, direction: Direction) -> Result<(), Error> {
         let client = reqwest::blocking::Client::new();
+
         let res = client
-            .put(format!("{}/{}/move/{direction}", self.base_url, self.bot))
+            .put(format!(
+                "{}/{}/move/{}",
+                self.base_url,
+                self.bot,
+                direction_to_literal(&direction)
+            ))
             .send();
         match res {
             Ok(s) => {
@@ -51,22 +57,22 @@ impl Default for RestBot {
 impl Commands for RestBot {
     fn go_east(&self) -> Result<(), Error> {
         debug!("go_east");
-        self.navigate(EAST)
+        self.navigate(Direction::EAST)
     }
 
     fn go_north(&self) -> Result<(), Error> {
         debug!("go_north");
-        self.navigate(NORTH)
+        self.navigate(Direction::NORTH)
     }
 
     fn go_south(&self) -> Result<(), Error> {
         debug!("go_south");
-        self.navigate(SOUTH)
+        self.navigate(Direction::SOUTH)
     }
 
     fn go_west(&self) -> Result<(), Error> {
         debug!("go_west");
-        self.navigate(WEST)
+        self.navigate(Direction::WEST)
     }
 
     fn scan_near(&self) -> Result<(), Error> {

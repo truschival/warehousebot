@@ -1,5 +1,5 @@
 use super::bot::{Commands, Error};
-use crate::directions::{EAST, NORTH, SOUTH, WEST};
+use crate::{EAST_LIT, NORTH_LIT, SOUTH_LIT, WEST_LIT};
 
 pub struct Cli<T> {
     executor: T,
@@ -38,11 +38,12 @@ impl<T: Commands> Cli<T> {
     pub fn dispatch_command_for_string(&self, cmd: &str) -> Result<String, CliError> {
         let cmd = cmd.to_ascii_lowercase();
         let cmd = cmd.trim();
+
         match cmd {
-            NORTH => process_navigation_command(self.executor.go_north(), cmd),
-            WEST => process_navigation_command(self.executor.go_west(), cmd),
-            SOUTH => process_navigation_command(self.executor.go_south(), cmd),
-            EAST => process_navigation_command(self.executor.go_east(), cmd),
+            NORTH_LIT => process_navigation_command(self.executor.go_north(), cmd),
+            WEST_LIT => process_navigation_command(self.executor.go_west(), cmd),
+            SOUTH_LIT => process_navigation_command(self.executor.go_south(), cmd),
+            EAST_LIT => process_navigation_command(self.executor.go_east(), cmd),
             "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),
             _ => Err(CliError::CommandUnknown),
         }

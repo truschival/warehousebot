@@ -1,16 +1,46 @@
 pub mod cli;
-
 pub mod warehouse;
 
-pub mod directions {
-    pub const NORTH: &str = "north";
-    pub const WEST: &str = "west";
-    pub const EAST: &str = "east";
-    pub const SOUTH: &str = "south";
+#[derive(Debug)]
+pub enum Direction {
+    NORTH = 0,
+    EAST = 1,
+    SOUTH = 2,
+    WEST = 3,
+}
+
+#[derive(Debug)]
+pub enum Error {
+    InvalidDirection,
+}
+
+pub const NORTH_LIT: &str = "north";
+pub const EAST_LIT: &str = "east";
+pub const SOUTH_LIT: &str = "south";
+pub const WEST_LIT: &str = "west";
+
+pub fn literal_to_direction(lit: &str) -> Result<Direction, Error> {
+    let lit = lit.to_lowercase();
+    match lit.as_str() {
+        NORTH_LIT => Ok(Direction::NORTH),
+        WEST_LIT => Ok(Direction::WEST),
+        SOUTH_LIT => Ok(Direction::SOUTH),
+        EAST_LIT => Ok(Direction::EAST),
+        _ => Err(Error::InvalidDirection),
+    }
+}
+
+fn direction_to_literal(direction: &crate::Direction) -> String {
+    match direction {
+        Direction::NORTH => NORTH_LIT.to_string(),
+        Direction::WEST => WEST_LIT.to_string(),
+        Direction::SOUTH => SOUTH_LIT.to_string(),
+        Direction::EAST => EAST_LIT.to_string(),
+    }
 }
 
 pub mod bot {
-    use crate::directions::{EAST, NORTH, SOUTH, WEST};
+    use crate::Direction::{EAST, NORTH, SOUTH, WEST};
     use log::debug;
     use std::collections::HashMap;
 
@@ -36,7 +66,7 @@ pub mod bot {
 
     pub struct MockBot {
         pub bot: String,
-        call_count: HashMap<String, i32>,
+        call_count: HashMap<isize, i32>,
     }
 
     impl Default for MockBot {
@@ -44,17 +74,17 @@ pub mod bot {
             Self {
                 bot: "paul".to_string(),
                 call_count: HashMap::from([
-                    (NORTH.to_string(), 0),
-                    (WEST.to_string(), 0),
-                    (SOUTH.to_string(), 0),
-                    (EAST.to_string(), 0),
+                    (NORTH as isize, 0),
+                    (WEST as isize, 0),
+                    (SOUTH as isize, 0),
+                    (EAST as isize, 0),
                 ]),
             }
         }
     }
 
     impl MockBot {
-        pub fn get_call_count(&self) -> &HashMap<String, i32> {
+        pub fn get_call_count(&self) -> &HashMap<isize, i32> {
             &self.call_count
         }
     }

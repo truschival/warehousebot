@@ -1,4 +1,5 @@
-use crate::directions::{EAST, NORTH, SOUTH, WEST};
+use crate::Direction::{self, EAST, NORTH, SOUTH, WEST};
+use crate::{direction_to_literal, literal_to_direction};
 use log::debug;
 use std::collections::HashMap;
 
@@ -64,9 +65,12 @@ impl Cell {
         }
     }
 
-    pub fn add_wall(&mut self, side: &str) {
-        if self.walls.contains_key(side) {
-            panic!("You already have a wall on side: '{side}'!");
+    pub fn add_wall(&mut self, side: Direction) {
+        // I can't use enum as key in hashmap... convert back
+        let side_str = direction_to_literal(&side);
+
+        if self.walls.contains_key(&side_str) {
+            panic!("You already have a wall on side: '{side_str}'!");
         }
 
         match self.walls.len() {
@@ -80,9 +84,11 @@ impl Cell {
                     .walls
                     .keys()
                     .next()
-                    .expect("There should be a wall but is none")
-                    .as_str();
-                debug!("Found one wall on the {} side, adding {}", firstwall, side);
+                    .expect("There should be a wall but is none");
+
+                let firstwall = literal_to_direction(firstwall)
+                    .expect("Hashmap key did not match valid direction!");
+
                 // are we building a corner or hallway?
                 match firstwall {
                     SOUTH | NORTH => match side {
@@ -94,7 +100,6 @@ impl Cell {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
-                        _ => panic!("illegal side for wall: {side}"),
                     },
                     WEST | EAST => match side {
                         SOUTH | NORTH => {
@@ -105,9 +110,7 @@ impl Cell {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
-                        _ => panic!("illegal side for wall: {side}"),
                     },
-                    _ => panic!("unknown wall in walls {firstwall}!"),
                 }
             }
             2 => {
@@ -116,7 +119,7 @@ impl Cell {
             }
             _ => panic!("Our cells can only have 3 walls!"),
         }
-        self.walls.insert(side.to_string(), Wall::default());
+        self.walls.insert(side_str, Wall::default());
     }
 
     pub fn was_visited(&self) -> bool {
@@ -153,7 +156,7 @@ impl Cell {
     }
 
     pub fn stored_good_type(&self) -> &str {
-        if let Some(good) = self.shelf_inventory.get(0) {
+        if let Some(good) = self.shelf_inventory.first() {
             good
         } else {
             "-"
@@ -163,6 +166,8 @@ impl Cell {
 
 #[cfg(test)]
 mod tests {
+    use crate::SOUTH_LIT;
+
     use super::*;
 
     #[test]
@@ -200,9 +205,7 @@ mod tests {
         assert_eq!(c.storage_capacity(), 12);
 
         assert_eq!(c.walls.len(), 3);
-        if let None = c.walls.get(SOUTH) {
-            assert!(false);
-        }
+        assert!(c.walls.contains_key(SOUTH_LIT))
     }
 
     #[test]
@@ -253,8 +256,8 @@ mod tests {
     #[should_panic]
     fn test_cell_add_wall_twice() {
         let mut c = Cell::new(Coords2D(1, 2));
-        c.add_wall("south");
-        c.add_wall("south");
+        c.add_wall(SOUTH);
+        c.add_wall(SOUTH);
     }
 
     #[test]
