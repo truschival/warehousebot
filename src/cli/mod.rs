@@ -1,5 +1,4 @@
 use super::bot::{CommandError, Commands};
-use log::debug;
 
 pub struct Cli<T> {
     executor: T,

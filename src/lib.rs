@@ -1,5 +1,7 @@
 pub mod cli;
 
+pub mod warehouse;
+
 pub mod bot {
     use log::debug;
     use std::collections::HashMap;
