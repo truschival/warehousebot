@@ -1,6 +1,6 @@
 use crate::Direction::{self, EAST, NORTH, SOUTH, WEST};
 use crate::{direction_to_literal, literal_to_direction};
-use log::debug;
+use log::{debug, error};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -9,6 +9,7 @@ pub struct Wall {}
 #[derive(Debug, PartialEq)]
 pub enum Error {
     CellInvalid,
+    WallExists,
     GoodsIncompatible,
     StorageExceeded,
 }
@@ -16,7 +17,7 @@ pub enum Error {
 #[derive(PartialEq, Debug)]
 pub struct Coords2D(i32, i32);
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum CellType {
     XCross,
     TCross,
@@ -65,12 +66,13 @@ impl Cell {
         }
     }
 
-    pub fn add_wall(&mut self, side: Direction) {
+    pub fn add_wall(&mut self, side: Direction) -> Result<CellType, Error> {
         // I can't use enum as key in hashmap... convert back
         let side_str = direction_to_literal(&side);
 
         if self.walls.contains_key(&side_str) {
-            panic!("You already have a wall on side: '{side_str}'!");
+            error!("You already have a wall on side: '{side_str}'!");
+            return Err(Error::WallExists);
         }
 
         match self.walls.len() {
@@ -117,9 +119,13 @@ impl Cell {
                 debug!("found 2 walls, adding 3rd it becomes a DeadEnd!");
                 self.cell_type = CellType::DeadEnd
             }
-            _ => panic!("Our cells can only have 3 walls!"),
+            _ => {
+                error!("Can't add a 4th wall!");
+                return Err(Error::CellInvalid);
+            }
         }
         self.walls.insert(side_str, Wall::default());
+        Ok(self.cell_type.clone())
     }
 
     pub fn was_visited(&self) -> bool {
@@ -192,15 +198,13 @@ mod tests {
         let mut c = Cell::new(Coords2D(1, 2));
         assert_eq!(c.cell_type, CellType::XCross);
 
-        c.add_wall(SOUTH);
-        assert_eq!(c.cell_type, CellType::TCross);
+        assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
 
-        c.add_wall(NORTH);
-        assert_eq!(c.cell_type, CellType::Hallway);
+        assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Hallway);
         assert_eq!(c.storage_capacity(), 8);
 
-        c.add_wall(EAST);
+        assert!(c.add_wall(EAST).is_ok());
         assert_eq!(c.cell_type, CellType::DeadEnd);
         assert_eq!(c.storage_capacity(), 12);
 
@@ -211,53 +215,39 @@ mod tests {
     #[test]
     fn test_cell_build_corner() {
         let mut c = Cell::new(Coords2D(1, 2));
-
-        c.add_wall(SOUTH);
-        assert_eq!(c.cell_type, CellType::TCross);
+        assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
-
-        c.add_wall(EAST);
-        assert_eq!(c.cell_type, CellType::Corner);
+        assert_eq!(c.add_wall(EAST).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
         let mut c2 = Cell::new(Coords2D(2, 3));
-        c2.add_wall(EAST);
-        assert_eq!(c2.cell_type, CellType::TCross);
+        assert_eq!(c2.add_wall(EAST).unwrap(), CellType::TCross);
         assert_eq!(c2.storage_capacity(), 6);
 
-        c2.add_wall(SOUTH);
-        assert_eq!(c.cell_type, CellType::Corner);
+        assert_eq!(c2.add_wall(SOUTH).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
         println!("{}", c);
     }
 
     #[test]
-    #[should_panic]
     fn test_build_box_panic() {
         let mut c = Cell::new(Coords2D(1, 2));
-
-        c.add_wall(WEST);
-        assert_eq!(c.cell_type, CellType::TCross);
+        assert_eq!(c.add_wall(WEST).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
-
-        c.add_wall(NORTH);
-        assert_eq!(c.cell_type, CellType::Corner);
+        assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
-
-        c.add_wall(EAST);
-        assert_eq!(c.cell_type, CellType::DeadEnd);
+        assert_eq!(c.add_wall(EAST).unwrap(), CellType::DeadEnd);
         assert_eq!(c.storage_capacity(), 12);
 
-        c.add_wall(SOUTH);
+        assert!(c.add_wall(SOUTH).is_err());
     }
 
     #[test]
-    #[should_panic]
     fn test_cell_add_wall_twice() {
         let mut c = Cell::new(Coords2D(1, 2));
-        c.add_wall(SOUTH);
-        c.add_wall(SOUTH);
+        assert!(c.add_wall(SOUTH).is_ok());
+        assert!(c.add_wall(SOUTH).is_err());
     }
 
     #[test]
