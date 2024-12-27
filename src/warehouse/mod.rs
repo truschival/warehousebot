@@ -2,13 +2,14 @@ use crate::Direction;
 use crate::Direction::{EAST, NORTH, SOUTH, WEST};
 use crate::{direction_to_literal, literal_to_direction};
 use log::{debug, error};
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Wall {}
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct Warehouse {
     cell_layout: HashMap<Coords2D, Cell>,
 }
@@ -47,6 +48,9 @@ impl Coords2D {
             },
         }
     }
+    pub fn to_string(&self) -> String {
+        format!("{},{}", self.x, self.y).to_string()
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +74,7 @@ pub struct Cell {
 
 impl std::fmt::Display for Coords2D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.x, self.y)
+        write!(f, "{},{}", self.x, self.y)
     }
 }
 
@@ -203,13 +207,26 @@ impl Cell {
     }
 }
 
+impl Serialize for Warehouse {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.cell_layout.len()))?;
+        for (k, v) in &self.cell_layout {
+            map.serialize_entry(&k.to_string(), &v)?;
+        }
+        map.end()
+    }
+}
+
 impl Warehouse {
-    pub fn add_cell(mut self, pos: Coords2D, cell: Cell) -> Option<Cell> {
+    pub fn add_cell(&mut self, pos: Coords2D, cell: Cell) {
         debug!("Adding {} at {}", &cell, &pos);
-        self.cell_layout.insert(pos, cell)
+        self.cell_layout.entry(pos).or_insert(cell);
     }
 
-    pub fn storage_capacity(self) -> usize {
+    pub fn storage_capacity(&self) -> usize {
         let mut storage = 0;
         for (_, c) in self.cell_layout.iter() {
             storage += c.storage_capacity();
@@ -227,8 +244,8 @@ mod tests {
     #[test]
     fn test_new_cell() {
         let c = Cell::new(Coords2D { x: 1, y: 2 });
-        assert_eq!(c.pos.0, 1);
-        assert_eq!(c.pos.1, 2);
+        assert_eq!(c.pos.x, 1);
+        assert_eq!(c.pos.y, 2);
         assert_eq!(c.walls.len(), 0);
         assert!(!c.was_visited());
         assert_eq!(c.storage_capacity(), 4);
