@@ -1,4 +1,5 @@
-use crate::Direction::{self, EAST, NORTH, SOUTH, WEST};
+use crate::Direction;
+use crate::Direction::{EAST, NORTH, SOUTH, WEST};
 use crate::{direction_to_literal, literal_to_direction};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
@@ -20,8 +21,33 @@ pub enum Error {
     StorageExceeded,
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
-pub struct Coords2D(i32, i32);
+#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct Coords2D {
+    pub x: i32,
+    pub y: i32,
+}
+impl Coords2D {
+    pub fn go(&self, dir: Direction) -> Self {
+        match dir {
+            NORTH => Self {
+                x: self.x,
+                y: self.y - 1,
+            },
+            EAST => Self {
+                x: self.x + 1,
+                y: self.y,
+            },
+            SOUTH => Self {
+                x: self.x,
+                y: self.y + 1,
+            },
+            WEST => Self {
+                x: self.x - 1,
+                y: self.y,
+            },
+        }
+    }
+}
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum CellType {
@@ -44,7 +70,7 @@ pub struct Cell {
 
 impl std::fmt::Display for Coords2D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.0, self.1)
+        write!(f, "({}, {})", self.x, self.y)
     }
 }
 
@@ -52,9 +78,8 @@ impl std::fmt::Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Cell: ({}, {}) - Storage ({}/{}) - Goods: {}",
-            self.pos.0,
-            self.pos.1,
+            "Cell: {} - Storage ({}/{}) - Goods: {}",
+            self.pos,
             self.occupied_storage(),
             self.storage_capacity(),
             self.stored_good_type()
@@ -201,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_new_cell() {
-        let c = Cell::new(Coords2D(1, 2));
+        let c = Cell::new(Coords2D { x: 1, y: 2 });
         assert_eq!(c.pos.0, 1);
         assert_eq!(c.pos.1, 2);
         assert_eq!(c.walls.len(), 0);
@@ -211,14 +236,14 @@ mod tests {
 
     #[test]
     fn test_visit_cell() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         c.visit();
         assert!(c.was_visited());
     }
 
     #[test]
     fn test_cell_add_walls_ok() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert_eq!(c.cell_type, CellType::XCross);
 
         assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
@@ -237,13 +262,13 @@ mod tests {
 
     #[test]
     fn test_cell_build_corner() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
         assert_eq!(c.add_wall(EAST).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
-        let mut c2 = Cell::new(Coords2D(2, 3));
+        let mut c2 = Cell::new(Coords2D { x: 2, y: 3 });
         assert_eq!(c2.add_wall(EAST).unwrap(), CellType::TCross);
         assert_eq!(c2.storage_capacity(), 6);
 
@@ -255,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_build_box_panic() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert_eq!(c.add_wall(WEST).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
         assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Corner);
@@ -268,14 +293,14 @@ mod tests {
 
     #[test]
     fn test_cell_add_wall_twice() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert!(c.add_wall(SOUTH).is_ok());
         assert!(c.add_wall(SOUTH).is_err());
     }
 
     #[test]
     fn test_add_items_ok() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert_eq!(c.stored_good_type(), "-");
         assert_eq!(c.occupied_storage(), 0);
         assert_eq!(c.storage_capacity(), 4);
@@ -286,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_add_items_fail_full() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
@@ -297,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_add_items_fail_mixed_goods() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         let e = c.put_good_on_shelf("Milch".to_string());
         assert!(e.is_err());
@@ -307,14 +332,14 @@ mod tests {
 
     #[test]
     fn test_serialize_default_cell() {
-        let c = Cell::new(Coords2D(1, 2));
+        let c = Cell::new(Coords2D { x: 1, y: 2 });
         let ser = serde_json::to_string(&c).unwrap();
         assert_eq!(ser, "{\"pos\":[1,2],\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
     }
 
     #[test]
     fn test_serializing_cell() {
-        let mut c = Cell::new(Coords2D(1, 2));
+        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();

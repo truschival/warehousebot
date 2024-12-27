@@ -25,7 +25,7 @@ fn main() -> rustyline::Result<()> {
     }
 
     let executor = RestBot::default();
-    let cli = Cli::new(executor);
+    let mut cli = Cli::new(executor);
 
     loop {
         let readline = rl.readline(">> ");

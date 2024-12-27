@@ -1,8 +1,13 @@
 use super::bot::{Commands, Error};
-use crate::{EAST_LIT, NORTH_LIT, SOUTH_LIT, WEST_LIT};
+use crate::{
+    save_state, warehouse::Warehouse, BOT_STATE_FILE_NAME, EAST_LIT, NORTH_LIT, SOUTH_LIT,
+    WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
+};
+use serde::Serialize;
 
 pub struct Cli<T> {
     executor: T,
+    warehouse: Warehouse,
 }
 
 #[derive(Debug)]
@@ -17,33 +22,56 @@ fn command_error_to_cli_error(err: Error) -> CliError {
         Error::HitWall => CliError::CommandFailed("Bot hit a wall".to_string()),
         Error::StoreageFull => CliError::CommandFailed("Storage full".to_string()),
         Error::ScanFailed => CliError::CommandFailed("Scan failed".to_string()),
+        Error::InvalidBot => CliError::CommandFailed("No such bot!".to_string()),
         Error::ClientError => {
             CliError::CommandFailed("Something is really bad - better abort".to_string())
         }
     }
 }
 
-fn process_navigation_command(res: Result<(), Error>, direction: &str) -> Result<String, CliError> {
+fn botresult_to_cli(res: Result<(), Error>) -> Result<String, CliError> {
     match res {
-        Ok(_) => Ok(format!("going {direction}")),
+        Ok(_) => Ok(format!("ok")),
         Err(e) => Err(command_error_to_cli_error(e)),
     }
 }
 
-impl<T: Commands> Cli<T> {
+impl<T: Commands + Serialize> Cli<T> {
     pub fn new(ex: T) -> Self {
-        Cli { executor: ex }
+        Cli {
+            executor: ex,
+            warehouse: Warehouse::default(),
+        }
     }
 
-    pub fn dispatch_command_for_string(&self, cmd: &str) -> Result<String, CliError> {
+    pub fn dispatch_command_for_string(&mut self, cmd: &str) -> Result<String, CliError> {
         let cmd = cmd.to_ascii_lowercase();
         let cmd = cmd.trim();
 
         match cmd {
-            NORTH_LIT => process_navigation_command(self.executor.go_north(), cmd),
-            WEST_LIT => process_navigation_command(self.executor.go_west(), cmd),
-            SOUTH_LIT => process_navigation_command(self.executor.go_south(), cmd),
-            EAST_LIT => process_navigation_command(self.executor.go_east(), cmd),
+            NORTH_LIT => botresult_to_cli(self.executor.go_north()),
+            WEST_LIT => botresult_to_cli(self.executor.go_west()),
+            SOUTH_LIT => botresult_to_cli(self.executor.go_south()),
+            EAST_LIT => botresult_to_cli(self.executor.go_east()),
+            "save_bot" => {
+                let serialized = serde_json::to_string(&self.executor).unwrap();
+                if let Err(e) = save_state(&serialized, BOT_STATE_FILE_NAME) {
+                    Err(CliError::CommandFailed(e.to_string()))
+                } else {
+                    Ok("Saved bot state".to_string())
+                }
+            }
+            "save_warehouse" => {
+                let serialized = serde_json::to_string(&self.warehouse).unwrap();
+                if let Err(e) = save_state(&serialized, WAREHOUSE_STATE_FILE_NAME) {
+                    Err(CliError::CommandFailed(e.to_string()))
+                } else {
+                    Ok("Saved warehouse state".to_string())
+                }
+            }
+
+            "locate" => Ok(format!("Location (rel): {}", self.executor.locate())),
+            "reset" => botresult_to_cli(self.executor.reset()),
             "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),
             _ => Err(CliError::CommandUnknown),
         }
