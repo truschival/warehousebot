@@ -1,10 +1,16 @@
 use crate::Direction::{self, EAST, NORTH, SOUTH, WEST};
 use crate::{direction_to_literal, literal_to_direction};
 use log::{debug, error};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Wall {}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Warehouse {
+    cell_layout: HashMap<Coords2D, Cell>,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -14,10 +20,10 @@ pub enum Error {
     StorageExceeded,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Coords2D(i32, i32);
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum CellType {
     XCross,
     TCross,
@@ -26,8 +32,10 @@ pub enum CellType {
     DeadEnd,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Cell {
     pub pos: Coords2D,
+    // I really wanted a hashmap for enum->Wall - but that's not working
     pub walls: HashMap<String, Wall>,
     shelf_inventory: Vec<String>,
     visited: bool,
@@ -170,6 +178,21 @@ impl Cell {
     }
 }
 
+impl Warehouse {
+    pub fn add_cell(mut self, pos: Coords2D, cell: Cell) -> Option<Cell> {
+        debug!("Adding {} at {}", &cell, &pos);
+        self.cell_layout.insert(pos, cell)
+    }
+
+    pub fn storage_capacity(self) -> usize {
+        let mut storage = 0;
+        for (_, c) in self.cell_layout.iter() {
+            storage += c.storage_capacity();
+        }
+        storage
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::SOUTH_LIT;
@@ -280,5 +303,21 @@ mod tests {
         assert!(e.is_err());
         assert_eq!(e.unwrap_err(), Error::GoodsIncompatible);
         assert_eq!(c.occupied_storage(), 1);
+    }
+
+    #[test]
+    fn test_serialize_default_cell() {
+        let c = Cell::new(Coords2D(1, 2));
+        let ser = serde_json::to_string(&c).unwrap();
+        assert_eq!(ser, "{\"pos\":[1,2],\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+    }
+
+    #[test]
+    fn test_serializing_cell() {
+        let mut c = Cell::new(Coords2D(1, 2));
+        c.add_wall(NORTH).unwrap();
+        c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
+        let ser = serde_json::to_string(&c).unwrap();
+        assert_eq!(ser, "{\"pos\":[1,2],\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
     }
 }
