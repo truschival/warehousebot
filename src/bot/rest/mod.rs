@@ -1,38 +1,55 @@
-use super::{CommandError, Commands};
+use super::{Commands, Error};
+use crate::{direction_to_literal, warehouse::Coords2D, Direction};
 use log::{debug, error, warn};
 use reqwest;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct RestBot {
+    location: Coords2D,
     pub bot: String,
     base_url: String,
 }
 
 impl RestBot {
     pub fn new(bot: String, base_url: String) -> Self {
-        Self { bot, base_url }
+        Self {
+            bot,
+            location: Coords2D { x: 0, y: 0 },
+            base_url,
+        }
     }
 
-    fn navigate(&self, direction: &str) -> Result<(), CommandError> {
+    fn navigate(&mut self, direction: Direction) -> Result<(), Error> {
         let client = reqwest::blocking::Client::new();
+
         let res = client
-            .put(format!("{}/{}/move/{direction}", self.base_url, self.bot))
+            .put(format!(
+                "{}/{}/move/{}",
+                self.base_url,
+                self.bot,
+                direction_to_literal(&direction)
+            ))
             .send();
         match res {
             Ok(s) => {
                 debug!("HTTP Status: {:?}", s.status());
                 match s.status().as_u16() {
-                    200 => Ok(()),
+                    200 => {
+                        self.location = self.location.go(direction);
+                        Ok(())
+                    }
                     404 => {
                         warn!("No such bot!");
-                        Err(CommandError::ClientError)
+                        Err(Error::InvalidBot)
                     }
-                    405 => Err(CommandError::HitWall),
-                    _ => Err(CommandError::ClientError),
+                    405 => Err(Error::HitWall),
+                    _ => Err(Error::ClientError),
                 }
             }
             Err(e) => {
                 error!("Error occured: {:?} - {}", e.status(), e.to_string());
-                Err(CommandError::ClientError)
+                Err(Error::ClientError)
             }
         }
     }
@@ -48,33 +65,67 @@ impl Default for RestBot {
 }
 
 impl Commands for RestBot {
-    fn go_east(&self) -> Result<(), CommandError> {
+    fn locate(&self) -> crate::warehouse::Coords2D {
+        self.location.clone()
+    }
+    fn go_east(&mut self) -> Result<(), Error> {
         debug!("go_east");
-        self.navigate("east")
+        self.navigate(Direction::EAST)
     }
 
-    fn go_north(&self) -> Result<(), CommandError> {
+    fn go_north(&mut self) -> Result<(), Error> {
         debug!("go_north");
-        self.navigate("north")
+        self.navigate(Direction::NORTH)
     }
 
-    fn go_south(&self) -> Result<(), CommandError> {
+    fn go_south(&mut self) -> Result<(), Error> {
         debug!("go_south");
-        self.navigate("south")
+        self.navigate(Direction::SOUTH)
     }
 
-    fn go_west(&self) -> Result<(), CommandError> {
+    fn go_west(&mut self) -> Result<(), Error> {
         debug!("go_west");
-        self.navigate("west")
+        self.navigate(Direction::WEST)
     }
 
-    fn scan_near(&self) -> Result<(), CommandError> {
+    fn scan_near(&self) -> Result<(), Error> {
         debug!("Scan Near");
-        Err(CommandError::ScanFailed)
+        Err(Error::ScanFailed)
     }
 
-    fn reset(&self) -> Result<(), CommandError> {
+    fn reset(&mut self) -> Result<(), Error> {
         debug!("Reset Bot");
-        Ok(())
+        let client = reqwest::blocking::Client::new();
+
+        let res = client
+            .put(format!(
+                "{}/{}/reset",
+                "http://springschool-lb-54580289.eu-central-1.elb.amazonaws.com/api/james/",
+                self.bot
+            ))
+            .send();
+        match res {
+            Ok(s) => {
+                debug!("HTTP Status: {:?}", s.status());
+                match s.status().as_u16() {
+                    200 => {
+                        self.location = Coords2D::default();
+                        Ok(())
+                    }
+                    404 => {
+                        warn!("No such bot!");
+                        Err(Error::InvalidBot)
+                    }
+                    _ => {
+                        warn!("Other weird error occured!");
+                        Err(Error::ClientError)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Error occured: {:?} - {}", e.status(), e.to_string());
+                Err(Error::ClientError)
+            }
+        }
     }
 }

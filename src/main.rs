@@ -4,7 +4,6 @@ use rustyline::error::ReadlineError;
 use rustyline::{Cmd, DefaultEditor, KeyEvent};
 use simple_logger::SimpleLogger;
 use warehousebot::bot::rest::RestBot;
-use warehousebot::bot::MockBot;
 use warehousebot::cli::{Cli, CliError};
 
 fn main() -> rustyline::Result<()> {
@@ -26,7 +25,7 @@ fn main() -> rustyline::Result<()> {
     }
 
     let executor = RestBot::default();
-    let cli = Cli::new(executor);
+    let mut cli = Cli::new(executor);
 
     loop {
         let readline = rl.readline(">> ");
