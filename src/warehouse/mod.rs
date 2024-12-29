@@ -2,15 +2,63 @@ use crate::Direction;
 use crate::Direction::{EAST, NORTH, SOUTH, WEST};
 use crate::{direction_to_literal, literal_to_direction};
 use log::{debug, error};
-use serde::{Deserialize, Serialize};
+use serde::de::{Deserializer, MapAccess, Visitor};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Wall {}
 
-#[derive(Default, Serialize, Deserialize)]
+type CellGrid = HashMap<Coords2D, Cell>;
+#[derive(Default, Deserialize, Serialize, PartialEq, Debug)]
 pub struct Warehouse {
-    cell_layout: HashMap<Coords2D, Cell>,
+    #[serde(serialize_with = "serialize_cellgrid")]
+    #[serde(deserialize_with = "deserialize_cellgrid")]
+    cell_layout: CellGrid,
+}
+
+//Hashmap with Coords as key does not serialize nicely
+fn serialize_cellgrid<S>(grid: &CellGrid, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut map = serializer.serialize_map(Some(grid.len()))?;
+    for (k, v) in grid {
+        map.serialize_entry(&k.to_string(), &v)?;
+    }
+    map.end()
+}
+
+fn deserialize_cellgrid<'a, D>(deserializer: D) -> Result<CellGrid, D::Error>
+where
+    D: Deserializer<'a>,
+{
+    struct MapVisitor;
+
+    impl<'a> Visitor<'a> for MapVisitor {
+        type Value = CellGrid;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a map")
+        }
+
+        fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'a>,
+        {
+            let mut values = CellGrid::new();
+            while let Some((key, value)) = (access.next_entry::<String, Cell>())? {
+                println!("key:{} - value {}", key, value);
+                values.insert(Coords2D::from_string(key.as_str()).unwrap(), value);
+            }
+
+            Ok(values)
+        }
+    }
+
+    let visitor = MapVisitor;
+    deserializer.deserialize_map(visitor)
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,6 +95,25 @@ impl Coords2D {
             },
         }
     }
+    pub fn to_string(&self) -> String {
+        format!("{},{}", self.x, self.y).to_string()
+    }
+
+    pub fn from_string(stringrep: &str) -> Option<Self> {
+        let tokens: Vec<&str> = stringrep.split(",").collect();
+        if tokens.len() < 2 {
+            return None;
+        }
+
+        Some(Self {
+            x: tokens[0]
+                .parse()
+                .expect(format!("expected i32 for yx got {}", tokens[0]).as_str()),
+            y: tokens[1]
+                .parse()
+                .expect(format!("expected i32 for y got {}", tokens[1]).as_str()),
+        })
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -58,7 +125,7 @@ pub enum CellType {
     DeadEnd,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Cell {
     pub pos: Coords2D,
     // I really wanted a hashmap for enum->Wall - but that's not working
@@ -70,7 +137,7 @@ pub struct Cell {
 
 impl std::fmt::Display for Coords2D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.x, self.y)
+        write!(f, "{},{}", self.x, self.y)
     }
 }
 
@@ -204,12 +271,18 @@ impl Cell {
 }
 
 impl Warehouse {
-    pub fn add_cell(mut self, pos: Coords2D, cell: Cell) -> Option<Cell> {
-        debug!("Adding {} at {}", &cell, &pos);
-        self.cell_layout.insert(pos, cell)
+    pub fn add_default_cell(&mut self, pos: Coords2D) {
+        debug!("Adding new cell at {}", &pos);
+        let cell = Cell::new(pos.clone());
+        self.add_cell(pos, cell);
     }
 
-    pub fn storage_capacity(self) -> usize {
+    pub fn add_cell(&mut self, pos: Coords2D, cell: Cell) {
+        debug!("Adding {} at {}", &cell, &pos);
+        self.cell_layout.entry(pos).or_insert(cell);
+    }
+
+    pub fn storage_capacity(&self) -> usize {
         let mut storage = 0;
         for (_, c) in self.cell_layout.iter() {
             storage += c.storage_capacity();
@@ -220,15 +293,32 @@ impl Warehouse {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::SOUTH_LIT;
 
-    use super::*;
+    #[test]
+    fn test_coords_from_str() {
+        let strcoords = "3,4";
+        let c = Coords2D::from_string(strcoords).unwrap();
+        assert_eq!(c.x, 3);
+        assert_eq!(c.y, 4);
+
+        let wrong = "43";
+        assert!(Coords2D::from_string(wrong).is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_coords_from_str_panic() {
+        let wrong = "4,acht";
+        assert!(Coords2D::from_string(wrong).is_none());
+    }
 
     #[test]
     fn test_new_cell() {
         let c = Cell::new(Coords2D { x: 1, y: 2 });
-        assert_eq!(c.pos.0, 1);
-        assert_eq!(c.pos.1, 2);
+        assert_eq!(c.pos.x, 1);
+        assert_eq!(c.pos.y, 2);
         assert_eq!(c.walls.len(), 0);
         assert!(!c.was_visited());
         assert_eq!(c.storage_capacity(), 4);
@@ -331,18 +421,35 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_default_cell() {
+    fn test_serde_default_cell() {
         let c = Cell::new(Coords2D { x: 1, y: 2 });
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"pos\":[1,2],\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+
+        let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
+        assert_eq!(c, c2);
     }
 
     #[test]
-    fn test_serializing_cell() {
+    fn test_serde_cell() {
         let mut c = Cell::new(Coords2D { x: 1, y: 2 });
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"pos\":[1,2],\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+
+        let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    fn test_serde_warehouse() {
+        let mut wh = Warehouse::default();
+        wh.add_default_cell(Coords2D { x: 4, y: 7 });
+        let ser = serde_json::to_string(&wh).unwrap();
+        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
+
+        let wh2: Warehouse = serde_json::from_str(ser.as_str()).unwrap();
+        assert_eq!(wh, wh2);
     }
 }

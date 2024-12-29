@@ -1,7 +1,7 @@
 use super::bot::{Commands, Error};
 use crate::{
-    save_state, warehouse::Warehouse, BOT_STATE_FILE_NAME, EAST_LIT, NORTH_LIT, SOUTH_LIT,
-    WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
+    move_bot_in_warehouse, save_state, warehouse::Warehouse, BOT_STATE_FILE_NAME, EAST_LIT,
+    NORTH_LIT, SOUTH_LIT, WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
 };
 use serde::Serialize;
 
@@ -31,7 +31,7 @@ fn command_error_to_cli_error(err: Error) -> CliError {
 
 fn botresult_to_cli(res: Result<(), Error>) -> Result<String, CliError> {
     match res {
-        Ok(_) => Ok(format!("ok")),
+        Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(command_error_to_cli_error(e)),
     }
 }
@@ -49,10 +49,26 @@ impl<T: Commands + Serialize> Cli<T> {
         let cmd = cmd.trim();
 
         match cmd {
-            NORTH_LIT => botresult_to_cli(self.executor.go_north()),
-            WEST_LIT => botresult_to_cli(self.executor.go_west()),
-            SOUTH_LIT => botresult_to_cli(self.executor.go_south()),
-            EAST_LIT => botresult_to_cli(self.executor.go_east()),
+            NORTH_LIT => botresult_to_cli(move_bot_in_warehouse(
+                &mut self.executor,
+                &mut self.warehouse,
+                crate::Direction::NORTH,
+            )),
+            EAST_LIT => botresult_to_cli(move_bot_in_warehouse(
+                &mut self.executor,
+                &mut self.warehouse,
+                crate::Direction::EAST,
+            )),
+            SOUTH_LIT => botresult_to_cli(move_bot_in_warehouse(
+                &mut self.executor,
+                &mut self.warehouse,
+                crate::Direction::SOUTH,
+            )),
+            WEST_LIT => botresult_to_cli(move_bot_in_warehouse(
+                &mut self.executor,
+                &mut self.warehouse,
+                crate::Direction::WEST,
+            )),
             "save_bot" => {
                 let serialized = serde_json::to_string(&self.executor).unwrap();
                 if let Err(e) = save_state(&serialized, BOT_STATE_FILE_NAME) {
@@ -62,14 +78,21 @@ impl<T: Commands + Serialize> Cli<T> {
                 }
             }
             "save_warehouse" => {
-                let serialized = serde_json::to_string(&self.warehouse).unwrap();
-                if let Err(e) = save_state(&serialized, WAREHOUSE_STATE_FILE_NAME) {
-                    Err(CliError::CommandFailed(e.to_string()))
-                } else {
-                    Ok("Saved warehouse state".to_string())
+                let serialized = serde_json::to_string(&self.warehouse);
+                match serialized {
+                    Ok(serialized) => {
+                        if let Err(e) = save_state(&serialized, WAREHOUSE_STATE_FILE_NAME) {
+                            Err(CliError::CommandFailed(e.to_string()))
+                        } else {
+                            Ok("Saved warehouse state".to_string())
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Error serializing warehouse {}", e.to_string());
+                        Err(CliError::CommandFailed(e.to_string()))
+                    }
                 }
             }
-
             "locate" => Ok(format!("Location (rel): {}", self.executor.locate())),
             "reset" => botresult_to_cli(self.executor.reset()),
             "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),

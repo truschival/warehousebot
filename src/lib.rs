@@ -1,6 +1,9 @@
 pub mod cli;
 pub mod warehouse;
+use log::{debug, info};
 use std::fs;
+use warehouse::Cell;
+
 #[derive(Debug)]
 pub enum Direction {
     NORTH = 0,
@@ -43,20 +46,55 @@ fn direction_to_literal(direction: &crate::Direction) -> String {
 }
 
 fn save_state(data: &str, filename: &str) -> Result<(), std::io::Error> {
+    debug!("Save state to {}", filename);
     if let Some(mut filepath) = dirs::data_dir() {
         if !filepath.exists() {
             match fs::create_dir_all(&filepath) {
-                Ok(_) => log::info!("Created dir {:?}", &filepath),
+                Ok(_) => info!("Created dir {:?}", &filepath),
                 Err(e) => return Err(e),
             }
         }
 
         filepath.push(filename);
-        log::debug!("Writing to {:?}", filepath);
         fs::write(&filepath, data)
     } else {
+        log::error!("dirs::data_dir() failed!");
         Err(std::io::ErrorKind::NotADirectory.into())
     }
+}
+
+pub fn move_bot_in_warehouse(
+    bot: &mut impl bot::Commands,
+    warehouse: &mut warehouse::Warehouse,
+    direction: crate::Direction,
+) -> Result<(), bot::Error> {
+    match direction {
+        Direction::NORTH => {
+            debug!("move north");
+            bot.go_north()?;
+            let c = Cell::new(bot.locate());
+            warehouse.add_cell(bot.locate(), c);
+        }
+        Direction::EAST => {
+            debug!("move east");
+            bot.go_east()?;
+            let c = Cell::new(bot.locate());
+            warehouse.add_cell(bot.locate(), c);
+        }
+        Direction::SOUTH => {
+            debug!("move south");
+            bot.go_south()?;
+            let c = Cell::new(bot.locate());
+            warehouse.add_cell(bot.locate(), c);
+        }
+        Direction::WEST => {
+            debug!("move west");
+            bot.go_west()?;
+            let c = Cell::new(bot.locate());
+            warehouse.add_cell(bot.locate(), c);
+        }
+    }
+    Ok(())
 }
 
 pub mod bot {
@@ -78,7 +116,7 @@ pub mod bot {
         ClientError,
         InvalidBot,
     }
-    //
+
     pub trait Commands {
         fn locate(&self) -> Coords2D;
         fn go_north(&mut self) -> Result<(), Error>;
