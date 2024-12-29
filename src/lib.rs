@@ -2,7 +2,6 @@ pub mod cli;
 pub mod warehouse;
 use log::{debug, info};
 use std::fs;
-use warehouse::Cell;
 
 #[derive(Debug)]
 pub enum Direction {
@@ -15,6 +14,11 @@ pub enum Direction {
 #[derive(Debug)]
 pub enum Error {
     InvalidDirection,
+    HitWall,
+    StoreageFull,
+    ScanFailed,
+    ClientError,
+    InvalidBot,
 }
 
 pub const NORTH_LIT: &str = "north";
@@ -65,50 +69,60 @@ fn save_state(data: &str, filename: &str) -> Result<(), std::io::Error> {
 
 pub fn move_bot_in_warehouse(
     bot: &mut impl bot::Commands,
-    warehouse: &mut warehouse::Warehouse,
     direction: crate::Direction,
-) -> Result<(), bot::Error> {
+) -> Result<(), Error> {
     match direction {
         Direction::NORTH => {
             debug!("move north");
-            bot.go_north()?;
+            bot.go_north()
         }
         Direction::EAST => {
             debug!("move east");
-            bot.go_east()?;
+            bot.go_east()
         }
         Direction::SOUTH => {
             debug!("move south");
-            bot.go_south()?;
+            bot.go_south()
         }
         Direction::WEST => {
             debug!("move west");
-            bot.go_west()?;
+            bot.go_west()
         }
     }
-    warehouse.add_default_cell(bot.locate());
-    Ok(())
+}
+
+pub fn explore_warehouse_manually(
+    bot: &mut impl bot::Commands,
+    warehouse: &mut warehouse::Warehouse,
+    direction: crate::Direction,
+) -> Result<(), Error> {
+    if let Err(e) = move_bot_in_warehouse(bot, direction) {
+        log::error!("Bot error occured: {:?}", e);
+        return Err(e);
+    }
+    match bot.scan_near() {
+        Ok(c) => {
+            warehouse.insert_or_update_cell(bot.locate(), c);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("Bot error occured: {:?}", e);
+            Err(e)
+        }
+    }
 }
 
 pub mod bot {
     use crate::{
-        warehouse::Coords2D,
+        warehouse::{Cell, Coords2D},
         Direction::{EAST, NORTH, SOUTH, WEST},
+        Error,
     };
     use log::debug;
     use serde::{Deserialize, Serialize};
     use std::{collections::HashMap, fs, path::PathBuf};
 
     pub mod rest;
-
-    #[derive(Debug, PartialEq)]
-    pub enum Error {
-        HitWall,
-        StoreageFull,
-        ScanFailed,
-        ClientError,
-        InvalidBot,
-    }
 
     pub trait Commands {
         fn locate(&self) -> Coords2D;
@@ -117,7 +131,7 @@ pub mod bot {
         fn go_west(&mut self) -> Result<(), Error>;
         fn go_east(&mut self) -> Result<(), Error>;
 
-        fn scan_near(&self) -> Result<(), Error>;
+        fn scan_near(&self) -> Result<Cell, Error>;
         fn reset(&mut self) -> Result<(), Error>;
     }
 
@@ -164,25 +178,29 @@ pub mod bot {
 
         fn go_east(&mut self) -> Result<(), Error> {
             debug!("go_east");
+            self.location.x += 1;
             Ok(())
         }
 
         fn go_north(&mut self) -> Result<(), Error> {
             debug!("go_north");
+            self.location.y += 1;
             Ok(())
         }
 
         fn go_south(&mut self) -> Result<(), Error> {
             debug!("go_south");
+            self.location.y -= 1;
             Ok(())
         }
 
         fn go_west(&mut self) -> Result<(), Error> {
             debug!("go_west");
-            Err(Error::HitWall)
+            self.location.x -= 1;
+            Ok(())
         }
 
-        fn scan_near(&self) -> Result<(), Error> {
+        fn scan_near(&self) -> Result<Cell, Error> {
             debug!("Scan Near");
             Err(Error::ScanFailed)
         }

@@ -23,6 +23,14 @@ fn main() -> rustyline::Result<()> {
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
+    print!("\x1B[2J\x1B[1;1H");
+    print!(
+        r#"
+============= Warehouse CLI =============== 
+Copyright (c) 1972 - Warehouse Control Ltd.
+=========================================== 
+"#
+    );
 
     let executor = RestBot::default();
     let mut cli = Cli::new(executor);

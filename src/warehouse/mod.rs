@@ -128,7 +128,7 @@ pub enum CellType {
 pub struct Cell {
     pub pos: Coords2D,
     // I really wanted a hashmap for enum->Wall - but that's not working
-    pub walls: HashMap<String, Wall>,
+    walls: HashMap<String, Wall>,
     shelf_inventory: Vec<String>,
     visited: bool,
     cell_type: CellType,
@@ -280,12 +280,25 @@ impl Warehouse {
         self.cell_layout.insert(pos, cell);
     }
 
+    pub fn insert_or_update_cell(&mut self, pos: Coords2D, cell: Cell) {
+        self.cell_layout.insert(pos, cell);
+    }
+
     pub fn storage_capacity(&self) -> usize {
         let mut storage = 0;
         for (_, c) in self.cell_layout.iter() {
             storage += c.storage_capacity();
         }
         storage
+    }
+
+    pub fn cells(&self) -> usize {
+        self.cell_layout.len()
+    }
+
+    pub fn reset(&mut self) {
+        debug!("reset map!");
+        self.cell_layout.clear();
     }
 }
 
