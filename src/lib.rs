@@ -72,28 +72,21 @@ pub fn move_bot_in_warehouse(
         Direction::NORTH => {
             debug!("move north");
             bot.go_north()?;
-            let c = Cell::new(bot.locate());
-            warehouse.add_cell(bot.locate(), c);
         }
         Direction::EAST => {
             debug!("move east");
             bot.go_east()?;
-            let c = Cell::new(bot.locate());
-            warehouse.add_cell(bot.locate(), c);
         }
         Direction::SOUTH => {
             debug!("move south");
             bot.go_south()?;
-            let c = Cell::new(bot.locate());
-            warehouse.add_cell(bot.locate(), c);
         }
         Direction::WEST => {
             debug!("move west");
             bot.go_west()?;
-            let c = Cell::new(bot.locate());
-            warehouse.add_cell(bot.locate(), c);
         }
     }
+    warehouse.add_default_cell(bot.locate());
     Ok(())
 }
 

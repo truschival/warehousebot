@@ -40,7 +40,7 @@ where
         type Value = CellGrid;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("a map")
+            formatter.write_str("Expected \"i32,i32\" -> Cell mapping")
         }
 
         fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
@@ -49,7 +49,6 @@ where
         {
             let mut values = CellGrid::new();
             while let Some((key, value)) = (access.next_entry::<String, Cell>())? {
-                println!("key:{} - value {}", key, value);
                 values.insert(Coords2D::from_string(key.as_str()).unwrap(), value);
             }
 
@@ -272,14 +271,13 @@ impl Cell {
 
 impl Warehouse {
     pub fn add_default_cell(&mut self, pos: Coords2D) {
-        debug!("Adding new cell at {}", &pos);
+        if self.cell_layout.contains_key(&pos) {
+            debug!("Not adding cell, pos {} already filled", pos);
+            return;
+        }
+        debug!("Adding default cell at {}", &pos);
         let cell = Cell::new(pos.clone());
-        self.add_cell(pos, cell);
-    }
-
-    pub fn add_cell(&mut self, pos: Coords2D, cell: Cell) {
-        debug!("Adding {} at {}", &cell, &pos);
-        self.cell_layout.entry(pos).or_insert(cell);
+        self.cell_layout.insert(pos, cell);
     }
 
     pub fn storage_capacity(&self) -> usize {
