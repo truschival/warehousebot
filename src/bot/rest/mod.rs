@@ -1,8 +1,54 @@
 use super::{Commands, Error};
-use crate::{direction_to_literal, warehouse::Coords2D, Direction};
+use crate::{
+    direction_to_literal,
+    warehouse::{Cell, Coords2D},
+    Direction,
+};
 use log::{debug, error, warn};
 use reqwest;
 use serde::{Deserialize, Serialize};
+
+//{
+// "field_info": {
+//     "id": "Field",
+//     "max_capacity": 12,
+//     "shelf_inventory": [
+//       "beer",
+//       "beer"
+//     ],
+//     "walls": {
+//       "east": true,
+//       "north": true,
+//       "south": true,
+//       "west": false
+//     }
+//   },
+//   "request_status": "ok"
+// }
+
+mod rest_responses {
+    use serde::Deserialize;
+    #[derive(Deserialize, Debug)]
+    pub struct Walls {
+        pub east: bool,
+        pub north: bool,
+        pub south: bool,
+        pub west: bool,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct CellInfo {
+        pub shelf_inventory: Vec<String>,
+        pub walls: Walls,
+    }
+
+    #[derive(Deserialize, Debug)]
+    pub struct ScanNearResponse {
+        pub field_info: CellInfo,
+        // WHY!?!?! We already get a status in the HTTP response
+        // Nobody needs request_status: String,
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct RestBot {
@@ -53,6 +99,60 @@ impl RestBot {
             }
         }
     }
+
+    pub fn scan_near(&self) -> Result<Cell, Error> {
+        let res = reqwest::blocking::get(format!("{}/{}/scan/near", self.base_url, self.bot));
+
+        match res {
+            Ok(s) => {
+                debug!("HTTP Status: {:?}", s.status());
+                match s.status().as_u16() {
+                    200 => {
+                        if let Ok(snr) = s.json::<rest_responses::ScanNearResponse>() {
+                            Ok(scan_near_to_cell(self.location.clone(), snr.field_info))
+                        } else {
+                            log::error!("Deserialization of scan_near response failed!");
+                            Err(Error::ScanFailed)
+                        }
+                    }
+                    404 => {
+                        warn!("No such bot!");
+                        Err(Error::InvalidBot)
+                    }
+                    _ => {
+                        error!("Got unexpected HTTP status!");
+                        Err(Error::ClientError)
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Error occured: {:?} - {}", e.status(), e.to_string());
+                Err(Error::ClientError)
+            }
+        }
+    }
+}
+
+fn scan_near_to_cell(pos: Coords2D, ci: rest_responses::CellInfo) -> Cell {
+    let mut c = Cell::new(pos);
+    let walls = ci.walls;
+    if walls.east {
+        _ = c.add_wall(Direction::EAST);
+    }
+    if walls.north {
+        _ = c.add_wall(Direction::NORTH);
+    }
+    if walls.west {
+        _ = c.add_wall(Direction::WEST);
+    }
+    if walls.south {
+        _ = c.add_wall(Direction::SOUTH);
+    }
+
+    for item in ci.shelf_inventory {
+        _ = c.put_good_on_shelf(item);
+    }
+    c
 }
 
 impl Default for RestBot {
@@ -88,9 +188,9 @@ impl Commands for RestBot {
         self.navigate(Direction::WEST)
     }
 
-    fn scan_near(&self) -> Result<(), Error> {
+    fn scan_near(&self) -> Result<Cell, Error> {
         debug!("Scan Near");
-        Err(Error::ScanFailed)
+        self.scan_near()
     }
 
     fn reset(&mut self) -> Result<(), Error> {

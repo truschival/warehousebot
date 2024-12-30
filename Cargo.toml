@@ -22,3 +22,6 @@ path = "src/lib.rs"
 [features]
 default = ["with-file-history"]
 with-file-history = []
+
+# [build]
+# rustflags = "-C instrument-coverage"

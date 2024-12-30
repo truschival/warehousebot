@@ -1,7 +1,7 @@
-use super::bot::{Commands, Error};
+use super::bot::Commands;
 use crate::{
-    move_bot_in_warehouse, save_state, warehouse::Warehouse, BOT_STATE_FILE_NAME, EAST_LIT,
-    NORTH_LIT, SOUTH_LIT, WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
+    explore_warehouse_manually, load_state, save_state, warehouse::Warehouse, Error,
+    BOT_STATE_FILE_NAME, EAST_LIT, NORTH_LIT, SOUTH_LIT, WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
 };
 use serde::Serialize;
 
@@ -23,6 +23,7 @@ fn command_error_to_cli_error(err: Error) -> CliError {
         Error::StoreageFull => CliError::CommandFailed("Storage full".to_string()),
         Error::ScanFailed => CliError::CommandFailed("Scan failed".to_string()),
         Error::InvalidBot => CliError::CommandFailed("No such bot!".to_string()),
+        Error::InvalidDirection => CliError::CommandFailed("Invalid Direction".to_string()),
         Error::ClientError => {
             CliError::CommandFailed("Something is really bad - better abort".to_string())
         }
@@ -49,53 +50,63 @@ impl<T: Commands + Serialize> Cli<T> {
         let cmd = cmd.trim();
 
         match cmd {
-            NORTH_LIT => botresult_to_cli(move_bot_in_warehouse(
+            NORTH_LIT => botresult_to_cli(explore_warehouse_manually(
                 &mut self.executor,
                 &mut self.warehouse,
                 crate::Direction::NORTH,
             )),
-            EAST_LIT => botresult_to_cli(move_bot_in_warehouse(
+            EAST_LIT => botresult_to_cli(explore_warehouse_manually(
                 &mut self.executor,
                 &mut self.warehouse,
                 crate::Direction::EAST,
             )),
-            SOUTH_LIT => botresult_to_cli(move_bot_in_warehouse(
+            SOUTH_LIT => botresult_to_cli(explore_warehouse_manually(
                 &mut self.executor,
                 &mut self.warehouse,
                 crate::Direction::SOUTH,
             )),
-            WEST_LIT => botresult_to_cli(move_bot_in_warehouse(
+            WEST_LIT => botresult_to_cli(explore_warehouse_manually(
                 &mut self.executor,
                 &mut self.warehouse,
                 crate::Direction::WEST,
             )),
             "save_bot" => {
-                let serialized = serde_json::to_string(&self.executor).unwrap();
-                if let Err(e) = save_state(&serialized, BOT_STATE_FILE_NAME) {
+                if let Err(e) = save_state(&self.executor, BOT_STATE_FILE_NAME) {
                     Err(CliError::CommandFailed(e.to_string()))
                 } else {
                     Ok("Saved bot state".to_string())
                 }
             }
             "save_warehouse" => {
-                let serialized = serde_json::to_string(&self.warehouse);
-                match serialized {
-                    Ok(serialized) => {
-                        if let Err(e) = save_state(&serialized, WAREHOUSE_STATE_FILE_NAME) {
-                            Err(CliError::CommandFailed(e.to_string()))
-                        } else {
-                            Ok("Saved warehouse state".to_string())
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Error serializing warehouse {}", e.to_string());
-                        Err(CliError::CommandFailed(e.to_string()))
-                    }
+                if let Err(e) = save_state(&self.warehouse, WAREHOUSE_STATE_FILE_NAME) {
+                    Err(CliError::CommandFailed(e.to_string()))
+                } else {
+                    Ok("Saved warehouse state".to_string())
                 }
             }
-            "locate" => Ok(format!("Location (rel): {}", self.executor.locate())),
-            "reset" => botresult_to_cli(self.executor.reset()),
-            "NEAR" | "FAR" => Err(CliError::CommandNotImplemented),
+            "load_warehouse" => match load_state::<Warehouse>(WAREHOUSE_STATE_FILE_NAME) {
+                Some(wh) => {
+                    self.warehouse = wh;
+                    Ok("Loaded Warehouse".to_string())
+                }
+                None => Err(CliError::CommandFailed(
+                    "error loading warehouse".to_string(),
+                )),
+            },
+            "inspect_warehouse" => Ok(format!(
+                "#cells: {} total capacity: {}",
+                self.warehouse.cells(),
+                self.warehouse.storage_capacity()
+            )),
+            "reset_warehouse" => {
+                self.warehouse.reset();
+                Ok("cleared warehouse".to_string())
+            }
+            "near" => match self.executor.scan_near() {
+                Ok(cx) => Ok(cx.to_string()),
+                Err(e) => Err(command_error_to_cli_error(e)),
+            },
+            "FAR" => Err(CliError::CommandNotImplemented),
             _ => Err(CliError::CommandUnknown),
         }
     }
