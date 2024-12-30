@@ -10,7 +10,7 @@ use std::collections::HashMap;
 #[derive(Default, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Wall {}
 
-type CellGrid = HashMap<Coords2D, Cell>;
+pub type CellGrid = HashMap<Coords2D, Cell>;
 #[derive(Default, Deserialize, Serialize, PartialEq, Debug)]
 pub struct Warehouse {
     #[serde(serialize_with = "serialize_cellgrid")]

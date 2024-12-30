@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod cliplotter;
 pub mod warehouse;
 use log::{debug, info};
 use serde::{de::DeserializeOwned, Serialize};
