@@ -1,7 +1,8 @@
 pub mod cli;
 pub mod warehouse;
 use log::{debug, info};
-use std::fs;
+use serde::{de::DeserializeOwned, Serialize};
+use std::{fs, path::PathBuf};
 
 #[derive(Debug)]
 pub enum Direction {
@@ -49,21 +50,45 @@ fn direction_to_literal(direction: &crate::Direction) -> String {
     }
 }
 
-fn save_state(data: &str, filename: &str) -> Result<(), std::io::Error> {
-    debug!("Save state to {}", filename);
-    if let Some(mut filepath) = dirs::data_dir() {
-        if !filepath.exists() {
-            match fs::create_dir_all(&filepath) {
-                Ok(_) => info!("Created dir {:?}", &filepath),
-                Err(e) => return Err(e),
-            }
-        }
-
-        filepath.push(filename);
-        fs::write(&filepath, data)
+fn get_data_dir() -> PathBuf {
+    if let Some(filepath) = dirs::data_dir() {
+        filepath
     } else {
-        log::error!("dirs::data_dir() failed!");
-        Err(std::io::ErrorKind::NotADirectory.into())
+        log::error!("dirs::data_dir() failed - returning current_dir()!");
+        std::env::current_dir().expect("current_dir() failed!")
+    }
+}
+
+fn save_state<T: Serialize>(object: &T, filename: &str) -> Result<(), std::io::Error> {
+    let serialized = serde_json::to_string(object).expect("cannot serialize object");
+    let mut filepath = get_data_dir();
+
+    if !filepath.exists() {
+        match fs::create_dir_all(&filepath) {
+            Ok(_) => info!("Created dir {:?}", &filepath),
+            Err(e) => return Err(e),
+        }
+    }
+
+    filepath.push(filename);
+    debug!("Save state to {:?}", &filepath);
+    fs::write(&filepath, serialized)
+}
+
+fn load_state<T: DeserializeOwned>(filename: &str) -> Option<T> {
+    let mut filepath = get_data_dir();
+    filepath.push(filename);
+    log::debug!("Loading from {:?}", &filepath);
+    match fs::read_to_string(filepath) {
+        Ok(s) => {
+            log::debug!("Read string from file");
+            let wh = serde_json::from_str::<T>(s.as_str()).expect("Deserialization failed!");
+            Some(wh)
+        }
+        Err(e) => {
+            log::error!("Read failed {}", e.to_string());
+            None
+        }
     }
 }
 

@@ -46,7 +46,7 @@ mod rest_responses {
     pub struct ScanNearResponse {
         pub field_info: CellInfo,
         // WHY!?!?! We already get a status in the HTTP response
-        request_status: String,
+        // Nobody needs request_status: String,
     }
 }
 

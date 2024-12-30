@@ -94,10 +94,6 @@ impl Coords2D {
             },
         }
     }
-    pub fn to_string(&self) -> String {
-        format!("{},{}", self.x, self.y).to_string()
-    }
-
     pub fn from_string(stringrep: &str) -> Option<Self> {
         let tokens: Vec<&str> = stringrep.split(",").collect();
         if tokens.len() < 2 {
@@ -107,10 +103,10 @@ impl Coords2D {
         Some(Self {
             x: tokens[0]
                 .parse()
-                .expect(format!("expected i32 for yx got {}", tokens[0]).as_str()),
+                .unwrap_or_else(|_| panic!("expected i32 for yx got {}", tokens[0])),
             y: tokens[1]
                 .parse()
-                .expect(format!("expected i32 for y got {}", tokens[1]).as_str()),
+                .unwrap_or_else(|_| panic!("expected i32 for y got {}", tokens[1])),
         })
     }
 }
