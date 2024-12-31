@@ -1,6 +1,6 @@
 use super::bot::Commands;
 use crate::{
-    explore_warehouse_manually, load_state, save_state, warehouse::Warehouse, Error,
+    cliplotter, explore_warehouse_manually, load_state, save_state, warehouse::Warehouse, Error,
     BOT_STATE_FILE_NAME, EAST_LIT, NORTH_LIT, SOUTH_LIT, WAREHOUSE_STATE_FILE_NAME, WEST_LIT,
 };
 use serde::Serialize;
@@ -93,6 +93,11 @@ impl<T: Commands + Serialize> Cli<T> {
                     "error loading warehouse".to_string(),
                 )),
             },
+            "show_warehouse" => {
+                let botlocation = Some(self.executor.locate());
+                let s = cliplotter::draw_warehouse(self.warehouse.get_cellgrid(), botlocation);
+                Ok(s)
+            }
             "inspect_warehouse" => Ok(format!(
                 "#cells: {} total capacity: {}",
                 self.warehouse.cells(),

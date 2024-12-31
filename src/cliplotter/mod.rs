@@ -49,12 +49,16 @@ pub fn output_gridsize(min: i32, max: i32) -> usize {
 }
 
 pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String {
+    if grid.is_empty() {
+        return "\n".to_string();
+    }
     // How large is the map?
     let ((x_min, x_max), (y_min, y_max)) = min_max_xy(grid.keys());
     let size_x = output_gridsize(x_min, x_max);
     let size_y = output_gridsize(y_min, y_max);
     // Allocate memory
     let mut s = String::with_capacity(size_x * size_y);
+    s.push('\n');
 
     // Botlocation
     let mut bot = Coords2D::default();

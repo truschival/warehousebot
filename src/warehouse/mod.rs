@@ -298,6 +298,9 @@ impl Warehouse {
         self.cell_layout.len()
     }
 
+    pub fn get_cellgrid(&self) -> &CellGrid {
+        &self.cell_layout
+    }
     pub fn reset(&mut self) {
         debug!("reset map!");
         self.cell_layout.clear();
