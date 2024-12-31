@@ -108,6 +108,9 @@ pub fn draw_warehouse(grid: &CellGrid) -> String {
                         } else {
                             side_walls.push_str("  "); // No wall and space
                         }
+                        if let None = grid.get(&coords_to_north(&current_pos)) {
+                            top_wall.push_str(NORTH_WEST_CORNER);
+                        }
                     } else {
                         side_walls.push_str("  "); // No wall and space
                     }
