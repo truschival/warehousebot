@@ -48,13 +48,21 @@ pub fn output_gridsize(min: i32, max: i32) -> usize {
     ((max - min) * 2 + 3) as usize // Note: we are 0 indext so there are 3 cells from -1 to 1
 }
 
-pub fn draw_warehouse(grid: &CellGrid) -> String {
+pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String {
     // How large is the map?
     let ((x_min, x_max), (y_min, y_max)) = min_max_xy(grid.keys());
     let size_x = output_gridsize(x_min, x_max);
     let size_y = output_gridsize(y_min, y_max);
     // Allocate memory
     let mut s = String::with_capacity(size_x * size_y);
+
+    // Botlocation
+    let mut bot = Coords2D::default();
+    let mut drawbot = false;
+    if let Some(bl) = botlocation {
+        drawbot = true;
+        bot = bl;
+    }
 
     // Rows: Each row writes 2 at least lines:
     // top_wall (if cell exists) \n
@@ -85,34 +93,49 @@ pub fn draw_warehouse(grid: &CellGrid) -> String {
                         side_walls.push_str(" ");
                     }
                     // ID or Robot sprite
-                    side_walls.push_str(&cell.id);
+                    if drawbot && bot == current_pos {
+                        side_walls.push_str(ROBOT_SPRITE);
+                    } else {
+                        side_walls.push_str(" ");
+                    }
+
+                    //side_walls.push_str(&cell.id);
                 }
                 // here is no cell, but was is there a cell above or to the left that needs walls?
                 None => {
+                    let mut has_west: bool = false;
+                    let mut has_north: bool = false;
+                    // There is a cell above - print its south wall +-
                     if let Some(north) = grid.get(&coords_to_north(&current_pos)) {
+                        has_north = true;
                         if north.has_wall(&Direction::SOUTH) {
                             top_wall.push_str(NORTH_WALL);
                         } else {
                             top_wall.push_str(NORTH_WEST_CORNER);
                         }
-                    } else if grid.contains_key(&coords_to_north_west(&current_pos)) {
-                        top_wall.push_str(NORTH_WEST_CORNER);
-                    } else {
-                        top_wall.push_str("  "); // No wall and space
                     }
 
                     if let Some(west) = grid.get(&coords_to_west(&current_pos)) {
+                        has_west = true;
                         if west.has_wall(&Direction::EAST) {
                             side_walls.push_str(LEFT_WALL);
                             side_walls.push_str(" "); // Space or Robot sprite
                         } else {
                             side_walls.push_str("  "); // No wall and space
                         }
-                        if let None = grid.get(&coords_to_north(&current_pos)) {
-                            top_wall.push_str(NORTH_WEST_CORNER);
-                        }
                     } else {
                         side_walls.push_str("  "); // No wall and space
+                    }
+
+                    let has_north_west = grid.contains_key(&coords_to_north_west(&current_pos));
+
+                    // if there is a cell above we are done
+                    if !has_north {
+                        if has_north_west || has_west {
+                            top_wall.push_str(NORTH_WEST_CORNER);
+                        } else {
+                            top_wall.push_str("  ");
+                        }
                     }
                 }
             }
@@ -292,11 +315,18 @@ mod tests {
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 18
+        let pos = Coords2D { x: 4, y: 1 };
+        let mut c = Cell::new(pos.clone());
+        c.id = "S".to_string();
+        _ = c.add_wall(Direction::WEST);
+        _ = c.add_wall(Direction::NORTH);
+        cg.insert(pos, c);
+        // Cell 19
         let pos = Coords2D { x: 4, y: 2 };
         let mut c = Cell::new(pos.clone());
         c.id = "R".to_string();
+        _ = c.add_wall(Direction::EAST);
         _ = c.add_wall(Direction::SOUTH);
-        _ = c.add_wall(Direction::NORTH);
         cg.insert(pos, c);
         cg
     }
@@ -308,11 +338,11 @@ mod tests {
         assert_eq!(output_gridsize(1, 3), 7);
         assert_eq!(output_gridsize(1, 1), 3);
     }
-    // #[test]
-    // #[should_panic]
-    // fn test_gridsize_panic() {
-    //     output_gridsize(2, 0);
-    // }
+    #[test]
+    #[should_panic]
+    fn test_gridsize_panic() {
+        output_gridsize(2, 0);
+    }
     #[test]
     fn test_min_max_1() {
         let cg = warehouse_1();
@@ -334,10 +364,11 @@ mod tests {
         assert_eq!(y_min, 0);
         assert_eq!(y_max, 4);
     }
-    #[test]
-    fn test_print() {
-        let cg = warehouse_2();
-        let s = draw_warehouse(&cg);
-        println!("\n\n{}\n", s);
-    }
+    // #[test]
+    // fn test_print() {
+    //     let cg = warehouse_2();
+    //     let botlocation = Some(Coords2D { x: 3, y: 2 });
+    //     let s = draw_warehouse(&cg, botlocation);
+    //     println!("\n\n{}\n", s);
+    // }
 }

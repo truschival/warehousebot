@@ -437,7 +437,7 @@ mod tests {
     fn test_serde_default_cell() {
         let c = Cell::new(Coords2D { x: 1, y: 2 });
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -449,7 +449,7 @@ mod tests {
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -460,7 +460,7 @@ mod tests {
         let mut wh = Warehouse::default();
         wh.add_default_cell(Coords2D { x: 4, y: 7 });
         let ser = serde_json::to_string(&wh).unwrap();
-        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
+        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
 
         let wh2: Warehouse = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(wh, wh2);
