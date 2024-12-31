@@ -123,6 +123,7 @@ pub enum CellType {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Cell {
     pub pos: Coords2D,
+    pub id: String,
     // I really wanted a hashmap for enum->Wall - but that's not working
     walls: HashMap<String, Wall>,
     shelf_inventory: Vec<String>,
@@ -154,11 +155,16 @@ impl Cell {
         debug!("New Cell at {}", &pos);
         Self {
             pos,
+            id: String::new(),
             walls: HashMap::new(),
             shelf_inventory: Vec::new(),
             visited: false,
             cell_type: CellType::XCross,
         }
+    }
+
+    pub fn has_wall(&self, side: &Direction) -> bool {
+        self.walls.contains_key(&direction_to_literal(side))
     }
 
     pub fn add_wall(&mut self, side: Direction) -> Result<CellType, Error> {
