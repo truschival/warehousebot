@@ -38,7 +38,7 @@ pub fn literal_to_direction(lit: &str) -> Result<Direction, Error> {
         WEST_LIT => Ok(Direction::WEST),
         SOUTH_LIT => Ok(Direction::SOUTH),
         EAST_LIT => Ok(Direction::EAST),
-        _ => Err(Error::InvalidDirection),
+        &_ => Err(Error::InvalidDirection),
     }
 }
 

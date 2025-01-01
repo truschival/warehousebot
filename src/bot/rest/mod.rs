@@ -109,7 +109,7 @@ impl RestBot {
                 match s.status().as_u16() {
                     200 => {
                         if let Ok(snr) = s.json::<rest_responses::ScanNearResponse>() {
-                            Ok(scan_near_to_cell(self.location.clone(), snr.field_info))
+                            Ok(scan_near_to_cell(snr.field_info))
                         } else {
                             log::error!("Deserialization of scan_near response failed!");
                             Err(Error::ScanFailed)
@@ -133,8 +133,8 @@ impl RestBot {
     }
 }
 
-fn scan_near_to_cell(pos: Coords2D, ci: rest_responses::CellInfo) -> Cell {
-    let mut c = Cell::new(pos);
+fn scan_near_to_cell(ci: rest_responses::CellInfo) -> Cell {
+    let mut c = Cell::default();
     let walls = ci.walls;
     if walls.east {
         _ = c.add_wall(Direction::EAST);
