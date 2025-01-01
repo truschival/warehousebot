@@ -10,7 +10,7 @@ use std::collections::HashMap;
 #[derive(Default, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Wall {}
 
-type CellGrid = HashMap<Coords2D, Cell>;
+pub type CellGrid = HashMap<Coords2D, Cell>;
 #[derive(Default, Deserialize, Serialize, PartialEq, Debug)]
 pub struct Warehouse {
     #[serde(serialize_with = "serialize_cellgrid")]
@@ -123,6 +123,7 @@ pub enum CellType {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Cell {
     pub pos: Coords2D,
+    pub id: String,
     // I really wanted a hashmap for enum->Wall - but that's not working
     walls: HashMap<String, Wall>,
     shelf_inventory: Vec<String>,
@@ -154,11 +155,16 @@ impl Cell {
         debug!("New Cell at {}", &pos);
         Self {
             pos,
+            id: String::new(),
             walls: HashMap::new(),
             shelf_inventory: Vec::new(),
             visited: false,
             cell_type: CellType::XCross,
         }
+    }
+
+    pub fn has_wall(&self, side: &Direction) -> bool {
+        self.walls.contains_key(&direction_to_literal(side))
     }
 
     pub fn add_wall(&mut self, side: Direction) -> Result<CellType, Error> {
@@ -292,6 +298,9 @@ impl Warehouse {
         self.cell_layout.len()
     }
 
+    pub fn get_cellgrid(&self) -> &CellGrid {
+        &self.cell_layout
+    }
     pub fn reset(&mut self) {
         debug!("reset map!");
         self.cell_layout.clear();
@@ -431,7 +440,7 @@ mod tests {
     fn test_serde_default_cell() {
         let c = Cell::new(Coords2D { x: 1, y: 2 });
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -443,7 +452,7 @@ mod tests {
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -454,7 +463,7 @@ mod tests {
         let mut wh = Warehouse::default();
         wh.add_default_cell(Coords2D { x: 4, y: 7 });
         let ser = serde_json::to_string(&wh).unwrap();
-        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
+        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
 
         let wh2: Warehouse = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(wh, wh2);
