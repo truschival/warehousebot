@@ -92,6 +92,11 @@ impl Coords2D {
                 x: self.x - 1,
                 y: self.y,
             },
+            // Special case for drawing
+            Direction::NORTHWEST => Self {
+                x: self.x - 1,
+                y: self.y - 1,
+            },
         }
     }
     pub fn from_string(stringrep: &str) -> Option<Self> {

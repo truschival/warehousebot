@@ -9,9 +9,7 @@ use log::{debug, error};
 pub const ROBOT_SPRITE: &str = "o"; // robot face (U+1F916)
 pub const NORTH_WALL: &str = "+-"; // horizontal scan line-1 (U+23BA)
 pub const NORTH_WEST_CORNER: &str = "+ ";
-pub const BOTTOM_WALL: &str = "+-"; // horizontal scan line-9 (U+23BD)
-pub const LEFT_WALL: &str = "|"; //vertical line extension (U+23D0)
-pub const RIGHT_WALL: &str = "|"; //vertical line extension (U+23D0)
+pub const WEST_WALL: &str = "|"; //vertical line extension (U+23D0)
 
 // TODO: Maybe it is not the best return type
 pub fn min_max_xy<'a, T>(coord_iter: T) -> ((i32, i32), (i32, i32))
@@ -61,11 +59,11 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
     s.push('\n');
 
     // Botlocation
-    let mut bot = Coords2D::default();
-    let mut drawbot = false;
+    let mut bot_pos = Coords2D::default();
+    let mut draw_bot = false;
     if let Some(bl) = botlocation {
-        drawbot = true;
-        bot = bl;
+        draw_bot = true;
+        bot_pos = bl;
     }
 
     // Rows: Each row writes 2 at least lines:
@@ -92,25 +90,24 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                     }
 
                     if cell.has_wall(&Direction::WEST) {
-                        side_walls.push_str(LEFT_WALL);
+                        side_walls.push_str(WEST_WALL);
                     } else {
                         side_walls.push_str(" ");
                     }
-                    // ID or Robot sprite
-                    if drawbot && bot == current_pos {
+                    // Cell content: ID or Robot sprite
+                    if draw_bot && bot_pos == current_pos {
                         side_walls.push_str(ROBOT_SPRITE);
                     } else {
                         side_walls.push_str(" ");
+                        //side_walls.push_str(&cell.id);
                     }
-
-                    //side_walls.push_str(&cell.id);
                 }
-                // here is no cell, but was is there a cell above or to the left that needs walls?
+                // here is no cell, but was is there a cell above or to the WEST that needs walls?
                 None => {
                     let mut has_west: bool = false;
                     let mut has_north: bool = false;
                     // There is a cell above - print its south wall +-
-                    if let Some(north) = grid.get(&coords_to_north(&current_pos)) {
+                    if let Some(north) = grid.get(&current_pos.go(Direction::NORTH)) {
                         has_north = true;
                         if north.has_wall(&Direction::SOUTH) {
                             top_wall.push_str(NORTH_WALL);
@@ -119,10 +116,10 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         }
                     }
 
-                    if let Some(west) = grid.get(&coords_to_west(&current_pos)) {
+                    if let Some(west) = grid.get(&current_pos.go(Direction::WEST)) {
                         has_west = true;
                         if west.has_wall(&Direction::EAST) {
-                            side_walls.push_str(LEFT_WALL);
+                            side_walls.push_str(WEST_WALL);
                             side_walls.push_str(" "); // Space or Robot sprite
                         } else {
                             side_walls.push_str("  "); // No wall and space
@@ -131,9 +128,11 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         side_walls.push_str("  "); // No wall and space
                     }
 
-                    let has_north_west = grid.contains_key(&coords_to_north_west(&current_pos));
+                    let has_north_west = grid.contains_key(&current_pos.go(Direction::NORTHWEST));
 
-                    // if there is a cell above we are done
+                    // Special Case for the corner crosses of east-most, or freestanding cells
+
+                    // if there is a cell above we are done, it
                     if !has_north {
                         if has_north_west || has_west {
                             top_wall.push_str(NORTH_WEST_CORNER);
@@ -150,27 +149,6 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
         s.push_str(&side_walls);
     }
     s
-}
-
-pub fn coords_to_west(current: &Coords2D) -> Coords2D {
-    Coords2D {
-        x: current.x - 1,
-        y: current.y,
-    }
-}
-
-pub fn coords_to_north(current: &Coords2D) -> Coords2D {
-    Coords2D {
-        x: current.x,
-        y: current.y - 1,
-    }
-}
-
-pub fn coords_to_north_west(current: &Coords2D) -> Coords2D {
-    Coords2D {
-        x: current.x - 1,
-        y: current.y - 1,
-    }
 }
 
 #[cfg(test)]

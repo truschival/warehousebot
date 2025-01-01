@@ -11,7 +11,7 @@ pub enum Direction {
     EAST = 1,
     SOUTH = 2,
     WEST = 3,
-    //  NORTH_WEST,
+    NORTHWEST,
 }
 
 #[derive(Debug)]
@@ -49,6 +49,7 @@ fn direction_to_literal(direction: &crate::Direction) -> String {
         Direction::WEST => WEST_LIT.to_string(),
         Direction::SOUTH => SOUTH_LIT.to_string(),
         Direction::EAST => EAST_LIT.to_string(),
+        _ => "".to_string(),
     }
 }
 
@@ -115,6 +116,7 @@ pub fn move_bot_in_warehouse(
             debug!("move west");
             bot.go_west()
         }
+        _ => Err(Error::InvalidDirection),
     }
 }
 
