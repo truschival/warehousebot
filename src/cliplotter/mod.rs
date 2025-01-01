@@ -1,10 +1,8 @@
-use std::i32;
-
 use crate::{
     warehouse::{CellGrid, Coords2D},
     Direction,
 };
-use log::{debug, error};
+use log::debug;
 
 pub const ROBOT_SPRITE: &str = "o"; // robot face (U+1F916)
 pub const NORTH_WALL: &str = "+-"; // horizontal scan line-1 (U+23BA)
@@ -92,13 +90,13 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                     if cell.has_wall(&Direction::WEST) {
                         side_walls.push_str(WEST_WALL);
                     } else {
-                        side_walls.push_str(" ");
+                        side_walls.push(' ');
                     }
                     // Cell content: ID or Robot sprite
                     if draw_bot && bot_pos == current_pos {
                         side_walls.push_str(ROBOT_SPRITE);
                     } else {
-                        side_walls.push_str(" ");
+                        side_walls.push(' ');
                         //side_walls.push_str(&cell.id);
                     }
                 }
@@ -120,7 +118,7 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         has_west = true;
                         if west.has_wall(&Direction::EAST) {
                             side_walls.push_str(WEST_WALL);
-                            side_walls.push_str(" "); // Space or Robot sprite
+                            side_walls.push(' '); // Space or Robot sprite
                         } else {
                             side_walls.push_str("  "); // No wall and space
                         }
@@ -128,7 +126,7 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         side_walls.push_str("  "); // No wall and space
                     }
 
-                    let has_north_west = grid.contains_key(&current_pos.go(Direction::NORTHWEST));
+                    let has_north_west = grid.contains_key(&get_nort_west_coors(&current_pos));
 
                     // Special Case for the corner crosses of east-most, or freestanding cells
 
@@ -149,6 +147,13 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
         s.push_str(&side_walls);
     }
     s
+}
+
+fn get_nort_west_coors(pos: &Coords2D) -> Coords2D {
+    Coords2D {
+        x: pos.x - 1,
+        y: pos.y - 1,
+    }
 }
 
 #[cfg(test)]
@@ -327,11 +332,4 @@ mod tests {
         assert_eq!(y_min, 0);
         assert_eq!(y_max, 4);
     }
-    // #[test]
-    // fn test_print() {
-    //     let cg = warehouse_2();
-    //     let botlocation = Some(Coords2D { x: 3, y: 2 });
-    //     let s = draw_warehouse(&cg, botlocation);
-    //     println!("\n\n{}\n", s);
-    // }
 }

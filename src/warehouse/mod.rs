@@ -66,6 +66,7 @@ pub enum Error {
     WallExists,
     GoodsIncompatible,
     StorageExceeded,
+    InvalidWall,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize, Clone, Default)]
@@ -91,11 +92,6 @@ impl Coords2D {
             WEST => Self {
                 x: self.x - 1,
                 y: self.y,
-            },
-            // Special case for drawing
-            Direction::NORTHWEST => Self {
-                x: self.x - 1,
-                y: self.y - 1,
             },
         }
     }
@@ -153,9 +149,9 @@ impl std::fmt::Display for Cell {
     }
 }
 
-impl Cell {
-    pub fn default() -> Self {
-        debug!("New Cell ");
+impl Default for Cell {
+    fn default() -> Self {
+        debug!("New default Cell");
         Self {
             id: String::new(),
             walls: HashMap::new(),
@@ -164,10 +160,12 @@ impl Cell {
             cell_type: CellType::XCross,
         }
     }
+}
 
+impl Cell {
     pub fn with_id(id: String) -> Self {
         Self {
-            id: id,
+            id,
             walls: HashMap::new(),
             shelf_inventory: Vec::new(),
             visited: false,
