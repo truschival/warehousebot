@@ -11,6 +11,7 @@ pub enum Direction {
     EAST = 1,
     SOUTH = 2,
     WEST = 3,
+    //  NORTH_WEST,
 }
 
 #[derive(Debug)]

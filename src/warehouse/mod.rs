@@ -122,7 +122,6 @@ pub enum CellType {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Cell {
-    pub pos: Coords2D,
     pub id: String,
     // I really wanted a hashmap for enum->Wall - but that's not working
     walls: HashMap<String, Wall>,
@@ -141,8 +140,7 @@ impl std::fmt::Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Cell: {} - Storage ({}/{}) - Goods: {}",
-            self.pos,
+            "Cell storage ({}/{}) - goods: {}",
             self.occupied_storage(),
             self.storage_capacity(),
             self.stored_good_type()
@@ -151,11 +149,20 @@ impl std::fmt::Display for Cell {
 }
 
 impl Cell {
-    pub fn new(pos: Coords2D) -> Self {
-        debug!("New Cell at {}", &pos);
+    pub fn default() -> Self {
+        debug!("New Cell ");
         Self {
-            pos,
             id: String::new(),
+            walls: HashMap::new(),
+            shelf_inventory: Vec::new(),
+            visited: false,
+            cell_type: CellType::XCross,
+        }
+    }
+
+    pub fn with_id(id: String) -> Self {
+        Self {
+            id: id,
             walls: HashMap::new(),
             shelf_inventory: Vec::new(),
             visited: false,
@@ -278,7 +285,7 @@ impl Warehouse {
             return;
         }
         debug!("Adding default cell at {}", &pos);
-        let cell = Cell::new(pos.clone());
+        let cell = Cell::default();
         self.cell_layout.insert(pos, cell);
     }
 
@@ -332,9 +339,7 @@ mod tests {
 
     #[test]
     fn test_new_cell() {
-        let c = Cell::new(Coords2D { x: 1, y: 2 });
-        assert_eq!(c.pos.x, 1);
-        assert_eq!(c.pos.y, 2);
+        let c = Cell::default();
         assert_eq!(c.walls.len(), 0);
         assert!(!c.was_visited());
         assert_eq!(c.storage_capacity(), 4);
@@ -342,14 +347,14 @@ mod tests {
 
     #[test]
     fn test_visit_cell() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         c.visit();
         assert!(c.was_visited());
     }
 
     #[test]
     fn test_cell_add_walls_ok() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert_eq!(c.cell_type, CellType::XCross);
 
         assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
@@ -368,13 +373,13 @@ mod tests {
 
     #[test]
     fn test_cell_build_corner() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
         assert_eq!(c.add_wall(EAST).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
-        let mut c2 = Cell::new(Coords2D { x: 2, y: 3 });
+        let mut c2 = Cell::default();
         assert_eq!(c2.add_wall(EAST).unwrap(), CellType::TCross);
         assert_eq!(c2.storage_capacity(), 6);
 
@@ -386,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_build_box_panic() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert_eq!(c.add_wall(WEST).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
         assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Corner);
@@ -399,14 +404,14 @@ mod tests {
 
     #[test]
     fn test_cell_add_wall_twice() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert!(c.add_wall(SOUTH).is_ok());
         assert!(c.add_wall(SOUTH).is_err());
     }
 
     #[test]
     fn test_add_items_ok() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert_eq!(c.stored_good_type(), "-");
         assert_eq!(c.occupied_storage(), 0);
         assert_eq!(c.storage_capacity(), 4);
@@ -417,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_add_items_fail_full() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
@@ -428,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_add_items_fail_mixed_goods() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::default();
         assert!(c.put_good_on_shelf("Kürbis".to_string()).is_ok());
         let e = c.put_good_on_shelf("Milch".to_string());
         assert!(e.is_err());
@@ -438,9 +443,9 @@ mod tests {
 
     #[test]
     fn test_serde_default_cell() {
-        let c = Cell::new(Coords2D { x: 1, y: 2 });
+        let c = Cell::default();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(&ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
+        assert_eq!(&ser, "{\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -448,11 +453,11 @@ mod tests {
 
     #[test]
     fn test_serde_cell() {
-        let mut c = Cell::new(Coords2D { x: 1, y: 2 });
+        let mut c = Cell::with_id("Q".to_string());
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"pos\":{\"x\":1,\"y\":2},\"id\":\"\",\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+        assert_eq!(ser, "{\"id\":\"Q\",\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);
@@ -461,9 +466,9 @@ mod tests {
     #[test]
     fn test_serde_warehouse() {
         let mut wh = Warehouse::default();
-        wh.add_default_cell(Coords2D { x: 4, y: 7 });
+        wh.insert_or_update_cell(Coords2D { x: 5, y: 7 }, Cell::with_id("A".to_string()));
         let ser = serde_json::to_string(&wh).unwrap();
-        assert_eq!(ser, "{\"cell_layout\":{\"4,7\":{\"pos\":{\"x\":4,\"y\":7},\"id\":\"\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
+        assert_eq!(ser, "{\"cell_layout\":{\"5,7\":{\"id\":\"A\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
 
         let wh2: Warehouse = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(wh, wh2);

@@ -195,7 +195,7 @@ mod tests {
             Coords2D { x: 4, y: 2 },
         ];
         for pos in coords {
-            cg.insert(pos.clone(), Cell::new(pos));
+            cg.insert(pos.clone(), Cell::default());
         }
         cg
     }
@@ -204,131 +204,112 @@ mod tests {
         let mut cg = CellGrid::new();
         // Cell1
         let pos = Coords2D { x: -2, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "A".to_string();
+        let mut c = Cell::with_id("A".to_string());
         _ = c.add_wall(Direction::WEST);
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 2
         let pos = Coords2D { x: -1, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "B".to_string();
+        let mut c = Cell::with_id("B".to_string());
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 3
         let pos = Coords2D { x: 0, y: 1 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "C".to_string();
+        let mut c = Cell::with_id("C".to_string());
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::WEST);
         cg.insert(pos, c);
         // Cell 4
         let pos = Coords2D { x: 0, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "D".to_string();
+        let c = Cell::with_id("D".to_string());
         cg.insert(pos, c);
 
         // Cell 5
         let pos = Coords2D { x: 0, y: 3 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "E".to_string();
+        let mut c = Cell::with_id("E".to_string());
         _ = c.add_wall(Direction::WEST);
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 6
         let pos = Coords2D { x: 1, y: 0 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "F".to_string();
+        let mut c = Cell::with_id("F".to_string());
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::WEST);
         cg.insert(pos, c);
         // Cell 7
         let pos = Coords2D { x: 1, y: 1 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "G".to_string();
+        let mut c = Cell::with_id("G".to_string());
         _ = c.add_wall(Direction::SOUTH);
         _ = c.add_wall(Direction::WEST);
         cg.insert(pos, c);
         // Cell 8
         let pos = Coords2D { x: 1, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "H".to_string();
+        let mut c = Cell::with_id("H".to_string());
         _ = c.add_wall(Direction::NORTH);
         cg.insert(pos, c);
         // Cell 9
         let pos = Coords2D { x: 1, y: 3 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "I".to_string();
+        let c = Cell::with_id("I".to_string());
         cg.insert(pos, c);
         // Cell 10
         let pos = Coords2D { x: 1, y: 4 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "J".to_string();
+        let mut c = Cell::with_id("J".to_string());
         _ = c.add_wall(Direction::SOUTH);
         _ = c.add_wall(Direction::WEST);
         _ = c.add_wall(Direction::EAST);
         cg.insert(pos, c);
         // Cell 11
         let pos = Coords2D { x: 2, y: 0 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "K".to_string();
+        let mut c = Cell::with_id("K".to_string());
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::EAST);
         cg.insert(pos, c);
         // Cell 12
         let pos = Coords2D { x: 2, y: 1 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "L".to_string();
+        let mut c = Cell::with_id("L".to_string());
         _ = c.add_wall(Direction::EAST);
         cg.insert(pos, c);
         // Cell 13
         let pos = Coords2D { x: 2, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "M".to_string();
+        let mut c = Cell::with_id("M".to_string());
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 14
         let pos = Coords2D { x: 2, y: 3 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "N".to_string();
+        let mut c = Cell::with_id("N".to_string());
         _ = c.add_wall(Direction::NORTH);
         cg.insert(pos, c);
         // Cell 15
         let pos = Coords2D { x: 2, y: 4 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "O".to_string();
+        let mut c = Cell::with_id("O".to_string());
         _ = c.add_wall(Direction::SOUTH);
         _ = c.add_wall(Direction::WEST);
         _ = c.add_wall(Direction::EAST);
         cg.insert(pos, c);
         // Cell 16
         let pos = Coords2D { x: 3, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "P".to_string();
+        let mut c = Cell::with_id("P".to_string());
         _ = c.add_wall(Direction::SOUTH);
         _ = c.add_wall(Direction::NORTH);
         cg.insert(pos, c);
         // Cell 17
         let pos = Coords2D { x: 3, y: 3 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "Q".to_string();
+        let mut c = Cell::with_id("Q".to_string());
         _ = c.add_wall(Direction::NORTH);
         _ = c.add_wall(Direction::EAST);
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
         // Cell 18
         let pos = Coords2D { x: 4, y: 1 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "S".to_string();
+        let mut c = Cell::with_id("R".to_string());
         _ = c.add_wall(Direction::WEST);
         _ = c.add_wall(Direction::NORTH);
         cg.insert(pos, c);
         // Cell 19
         let pos = Coords2D { x: 4, y: 2 };
-        let mut c = Cell::new(pos.clone());
-        c.id = "R".to_string();
+        let mut c = Cell::with_id("S".to_string());
         _ = c.add_wall(Direction::EAST);
         _ = c.add_wall(Direction::SOUTH);
         cg.insert(pos, c);
