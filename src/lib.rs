@@ -2,10 +2,11 @@ pub mod cli;
 pub mod cliplotter;
 pub mod warehouse;
 use log::{debug, info};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
+use serde::{de::DeserializeOwned,Deserialize};
 use std::{fs, path::PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
     NORTH = 0,
     EAST = 1,

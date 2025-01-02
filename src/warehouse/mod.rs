@@ -1,6 +1,5 @@
 use crate::Direction;
 use crate::Direction::{EAST, NORTH, SOUTH, WEST};
-use crate::{direction_to_literal, literal_to_direction};
 use log::{debug, error};
 use serde::de::{Deserializer, MapAccess, Visitor};
 use serde::ser::SerializeMap;
@@ -125,7 +124,7 @@ pub enum CellType {
 pub struct Cell {
     pub id: String,
     // I really wanted a hashmap for enum->Wall - but that's not working
-    walls: HashMap<String, Wall>,
+    walls: HashMap<Direction, Wall>,
     shelf_inventory: Vec<String>,
     visited: bool,
     cell_type: CellType,
@@ -174,15 +173,15 @@ impl Cell {
     }
 
     pub fn has_wall(&self, side: &Direction) -> bool {
-        self.walls.contains_key(&direction_to_literal(side))
+        self.walls.contains_key(side)
     }
 
     pub fn add_wall(&mut self, side: Direction) -> Result<CellType, Error> {
         // I can't use enum as key in hashmap... convert back
-        let side_str = direction_to_literal(&side);
+        // let side_str = direction_to_literal(&side);
 
-        if self.walls.contains_key(&side_str) {
-            error!("You already have a wall on side: '{side_str}'!");
+        if self.walls.contains_key(&side) {
+            error!("You already have a wall on side: '{:?}'!",&side);
             return Err(Error::WallExists);
         }
 
@@ -199,8 +198,8 @@ impl Cell {
                     .next()
                     .expect("There should be a wall but is none");
 
-                let firstwall = literal_to_direction(firstwall)
-                    .expect("Hashmap key did not match valid direction!");
+                // let firstwall = literal_to_direction(firstwall)
+                //     .expect("Hashmap key did not match valid direction!");
 
                 // are we building a corner or hallway?
                 match firstwall {
@@ -235,7 +234,7 @@ impl Cell {
                 return Err(Error::CellInvalid);
             }
         }
-        self.walls.insert(side_str, Wall::default());
+        self.walls.insert(side, Wall::default());
         Ok(self.cell_type.clone())
     }
 
@@ -320,7 +319,7 @@ impl Warehouse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SOUTH_LIT;
+    
 
     #[test]
     fn test_coords_from_str() {
@@ -371,7 +370,7 @@ mod tests {
         assert_eq!(c.storage_capacity(), 12);
 
         assert_eq!(c.walls.len(), 3);
-        assert!(c.walls.contains_key(SOUTH_LIT))
+        assert!(c.walls.contains_key(&SOUTH))
     }
 
     #[test]
@@ -460,7 +459,7 @@ mod tests {
         c.add_wall(NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
-        assert_eq!(ser, "{\"id\":\"Q\",\"walls\":{\"north\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
+        assert_eq!(ser, "{\"id\":\"Q\",\"walls\":{\"NORTH\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");
 
         let c2: Cell = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(c, c2);

@@ -1,7 +1,7 @@
 use colored::Colorize;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
-use rustyline::{Cmd, DefaultEditor, KeyEvent};
+use rustyline::DefaultEditor;
 use simple_logger::SimpleLogger;
 use warehousebot::bot::rest::RestBot;
 use warehousebot::cli::{Cli, CliError};
@@ -16,8 +16,7 @@ fn main() -> rustyline::Result<()> {
 
     let mut rl = DefaultEditor::new()?;
     rl.set_edit_mode(rustyline::EditMode::Emacs);
-    rl.bind_sequence(KeyEvent::ctrl('s'), Cmd::HistorySearchForward);
-    rl.bind_sequence(KeyEvent::ctrl('r'), Cmd::HistorySearchBackward);
+
 
     #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
@@ -26,9 +25,9 @@ fn main() -> rustyline::Result<()> {
     print!("\x1B[2J\x1B[1;1H");
     print!(
         r#"
-============= Warehouse CLI =============== 
+============= Warehouse CLI ===============
 Copyright (c) 1972 - Warehouse Control Ltd.
-=========================================== 
+===========================================
 "#
     );
 
