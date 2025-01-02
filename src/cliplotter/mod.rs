@@ -1,6 +1,7 @@
+use crate::warehouse::CellGrid;
 use crate::{
-    warehouse::{CellGrid, Coords2D},
-    Direction,
+    Coords2D,
+    Direction::{EAST, NORTH, SOUTH, WEST},
 };
 use log::debug;
 
@@ -64,13 +65,31 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
         bot_pos = bl;
     }
 
+    let mut top_wall = String::with_capacity(size_x + 4); // Space + index + space+ newline = 4
+    top_wall.push_str("     ");
+    let mut x_index = 'A';
+    for _ in x_min..=x_max {
+        top_wall.push_str(format!("{x_index:2}").as_str());
+        x_index = (x_index as u8 + 1) as char;
+    }
+    s.push_str(&top_wall);
+    s.push('\n');
+
     // Rows: Each row writes 2 at least lines:
     // top_wall (if cell exists) \n
     // leftwall (if cell exists), space (robot), right_wall (for the last entry)
     // bottom_wall for the last row: We go 1 below the last coordinate to make sure to draw the lines
     for y_index in y_min..=(y_max + 1) {
-        let mut top_wall = String::with_capacity(size_x + 1); // add 1 for newline
-        let mut side_walls = String::with_capacity(size_y + 1);
+        let mut top_wall = String::with_capacity(size_x + 4); // Space + index + space+ newline = 4
+        let mut side_walls = String::with_capacity(size_y + 4);
+
+        // Pad top_wall with spaces
+        top_wall.push_str("    ");
+        // show index on side wall
+        if y_index != y_max + 1 {
+            side_walls.push_str(format!(" {:2} ", y_index).as_str());
+        }
+
         // Columns
         for x_index in x_min..=(x_max + 1) {
             let current_pos = Coords2D {
@@ -81,13 +100,13 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
             match grid.get(&current_pos) {
                 // If we have a cell at this place draw left and top
                 Some(cell) => {
-                    if cell.has_wall(&Direction::NORTH) {
+                    if cell.has_wall(&NORTH) {
                         top_wall.push_str(NORTH_WALL);
                     } else {
                         top_wall.push_str(NORTH_WEST_CORNER);
                     }
 
-                    if cell.has_wall(&Direction::WEST) {
+                    if cell.has_wall(&WEST) {
                         side_walls.push_str(WEST_WALL);
                     } else {
                         side_walls.push(' ');
@@ -100,23 +119,23 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         //side_walls.push_str(&cell.id);
                     }
                 }
-                // here is no cell, but was is there a cell above or to the WEST that needs walls?
+                // here is no cell, but was is there a cell above or to the &WEST that needs walls?
                 None => {
                     let mut has_west: bool = false;
                     let mut has_north: bool = false;
-                    // There is a cell above - print its south wall +-
-                    if let Some(north) = grid.get(&current_pos.go(Direction::NORTH)) {
+                    // There is a cell above - print its &SOUTH wall +-
+                    if let Some(north_neighbor) = grid.get(&current_pos.neighbor_coords(&NORTH)) {
                         has_north = true;
-                        if north.has_wall(&Direction::SOUTH) {
+                        if north_neighbor.has_wall(&SOUTH) {
                             top_wall.push_str(NORTH_WALL);
                         } else {
                             top_wall.push_str(NORTH_WEST_CORNER);
                         }
                     }
 
-                    if let Some(west) = grid.get(&current_pos.go(Direction::WEST)) {
+                    if let Some(west_neighbor) = grid.get(&current_pos.neighbor_coords(&WEST)) {
                         has_west = true;
-                        if west.has_wall(&Direction::EAST) {
+                        if west_neighbor.has_wall(&EAST) {
                             side_walls.push_str(WEST_WALL);
                             side_walls.push(' '); // Space or Robot sprite
                         } else {
@@ -128,7 +147,7 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
 
                     let has_north_west = grid.contains_key(&get_nort_west_coors(&current_pos));
 
-                    // Special Case for the corner crosses of east-most, or freestanding cells
+                    // Special Case for the corner crosses of &EAST-most, or freestanding cells
 
                     // if there is a cell above we are done, it
                     if !has_north {
@@ -188,21 +207,21 @@ mod tests {
         // Cell1
         let pos = Coords2D { x: -2, y: 2 };
         let mut c = Cell::with_id("A".to_string());
-        _ = c.add_wall(Direction::WEST);
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&WEST);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         // Cell 2
         let pos = Coords2D { x: -1, y: 2 };
         let mut c = Cell::with_id("B".to_string());
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         // Cell 3
         let pos = Coords2D { x: 0, y: 1 };
         let mut c = Cell::with_id("C".to_string());
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::WEST);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&WEST);
         cg.insert(pos, c);
         // Cell 4
         let pos = Coords2D { x: 0, y: 2 };
@@ -212,25 +231,25 @@ mod tests {
         // Cell 5
         let pos = Coords2D { x: 0, y: 3 };
         let mut c = Cell::with_id("E".to_string());
-        _ = c.add_wall(Direction::WEST);
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&WEST);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         // Cell 6
         let pos = Coords2D { x: 1, y: 0 };
         let mut c = Cell::with_id("F".to_string());
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::WEST);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&WEST);
         cg.insert(pos, c);
         // Cell 7
         let pos = Coords2D { x: 1, y: 1 };
         let mut c = Cell::with_id("G".to_string());
-        _ = c.add_wall(Direction::SOUTH);
-        _ = c.add_wall(Direction::WEST);
+        _ = c.add_wall(&SOUTH);
+        _ = c.add_wall(&WEST);
         cg.insert(pos, c);
         // Cell 8
         let pos = Coords2D { x: 1, y: 2 };
         let mut c = Cell::with_id("H".to_string());
-        _ = c.add_wall(Direction::NORTH);
+        _ = c.add_wall(&NORTH);
         cg.insert(pos, c);
         // Cell 9
         let pos = Coords2D { x: 1, y: 3 };
@@ -239,62 +258,62 @@ mod tests {
         // Cell 10
         let pos = Coords2D { x: 1, y: 4 };
         let mut c = Cell::with_id("J".to_string());
-        _ = c.add_wall(Direction::SOUTH);
-        _ = c.add_wall(Direction::WEST);
-        _ = c.add_wall(Direction::EAST);
+        _ = c.add_wall(&SOUTH);
+        _ = c.add_wall(&WEST);
+        _ = c.add_wall(&EAST);
         cg.insert(pos, c);
         // Cell 11
         let pos = Coords2D { x: 2, y: 0 };
         let mut c = Cell::with_id("K".to_string());
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::EAST);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&EAST);
         cg.insert(pos, c);
         // Cell 12
         let pos = Coords2D { x: 2, y: 1 };
         let mut c = Cell::with_id("L".to_string());
-        _ = c.add_wall(Direction::EAST);
+        _ = c.add_wall(&EAST);
         cg.insert(pos, c);
         // Cell 13
         let pos = Coords2D { x: 2, y: 2 };
         let mut c = Cell::with_id("M".to_string());
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         // Cell 14
         let pos = Coords2D { x: 2, y: 3 };
         let mut c = Cell::with_id("N".to_string());
-        _ = c.add_wall(Direction::NORTH);
+        _ = c.add_wall(&NORTH);
         cg.insert(pos, c);
         // Cell 15
         let pos = Coords2D { x: 2, y: 4 };
         let mut c = Cell::with_id("O".to_string());
-        _ = c.add_wall(Direction::SOUTH);
-        _ = c.add_wall(Direction::WEST);
-        _ = c.add_wall(Direction::EAST);
+        _ = c.add_wall(&SOUTH);
+        _ = c.add_wall(&WEST);
+        _ = c.add_wall(&EAST);
         cg.insert(pos, c);
         // Cell 16
         let pos = Coords2D { x: 3, y: 2 };
         let mut c = Cell::with_id("P".to_string());
-        _ = c.add_wall(Direction::SOUTH);
-        _ = c.add_wall(Direction::NORTH);
+        _ = c.add_wall(&SOUTH);
+        _ = c.add_wall(&NORTH);
         cg.insert(pos, c);
         // Cell 17
         let pos = Coords2D { x: 3, y: 3 };
         let mut c = Cell::with_id("Q".to_string());
-        _ = c.add_wall(Direction::NORTH);
-        _ = c.add_wall(Direction::EAST);
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&NORTH);
+        _ = c.add_wall(&EAST);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         // Cell 18
         let pos = Coords2D { x: 4, y: 1 };
         let mut c = Cell::with_id("R".to_string());
-        _ = c.add_wall(Direction::WEST);
-        _ = c.add_wall(Direction::NORTH);
+        _ = c.add_wall(&WEST);
+        _ = c.add_wall(&NORTH);
         cg.insert(pos, c);
         // Cell 19
         let pos = Coords2D { x: 4, y: 2 };
         let mut c = Cell::with_id("S".to_string());
-        _ = c.add_wall(Direction::EAST);
-        _ = c.add_wall(Direction::SOUTH);
+        _ = c.add_wall(&EAST);
+        _ = c.add_wall(&SOUTH);
         cg.insert(pos, c);
         cg
     }

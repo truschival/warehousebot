@@ -1,6 +1,6 @@
 use crate::Direction;
 use crate::Direction::{EAST, NORTH, SOUTH, WEST};
-use log::{debug, error};
+use log::{debug, error, warn};
 use serde::de::{Deserializer, MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -10,6 +10,7 @@ use std::collections::HashMap;
 pub struct Wall {}
 
 pub type CellGrid = HashMap<Coords2D, Cell>;
+
 #[derive(Default, Deserialize, Serialize, PartialEq, Debug)]
 pub struct Warehouse {
     #[serde(serialize_with = "serialize_cellgrid")]
@@ -74,26 +75,34 @@ pub struct Coords2D {
     pub y: i32,
 }
 impl Coords2D {
-    pub fn go(&self, dir: Direction) -> Self {
+    pub fn neighbor_coords(&self, dir: &Direction) -> Self {
+        self.neighbor_coords_distance(dir, 1)
+    }
+
+    pub fn neighbor_coords_distance(&self, dir: &Direction, steps: i32) -> Self {
+        if steps < 0 {
+            warn!("consider positive steps for neighbor_coords and use opposite direction");
+        }
         match dir {
             NORTH => Self {
                 x: self.x,
-                y: self.y - 1,
+                y: self.y - steps,
             },
             EAST => Self {
-                x: self.x + 1,
+                x: self.x + steps,
                 y: self.y,
             },
             SOUTH => Self {
                 x: self.x,
-                y: self.y + 1,
+                y: self.y + steps,
             },
             WEST => Self {
-                x: self.x - 1,
+                x: self.x - steps,
                 y: self.y,
             },
         }
     }
+
     pub fn from_string(stringrep: &str) -> Option<Self> {
         let tokens: Vec<&str> = stringrep.split(",").collect();
         if tokens.len() < 2 {
@@ -140,17 +149,17 @@ impl std::fmt::Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Cell storage ({}/{}) - goods: {}",
+            "Storage ({}/{}) | goods: {} | walls: {:?}",
             self.occupied_storage(),
             self.storage_capacity(),
-            self.stored_good_type()
+            self.stored_good_type(),
+            self.walls.keys()
         )
     }
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        debug!("New default Cell");
         Self {
             id: String::new(),
             walls: HashMap::new(),
@@ -176,15 +185,15 @@ impl Cell {
         self.walls.contains_key(side)
     }
 
-    pub fn add_wall(&mut self, side: Direction) -> Result<CellType, Error> {
+    pub fn add_wall(&mut self, side: &Direction) -> Result<CellType, Error> {
         // I can't use enum as key in hashmap... convert back
         // let side_str = direction_to_literal(&side);
 
-        if self.walls.contains_key(&side) {
-            error!("You already have a wall on side: '{:?}'!",&side);
+        if self.walls.contains_key(side) {
+            error!("You already have a wall on side: '{:?}'!", &side);
             return Err(Error::WallExists);
         }
-
+        debug!("Adding wall on side: '{:?}'", &side);
         match self.walls.len() {
             0 => {
                 debug!("No wall yet: XCross->TCross");
@@ -203,22 +212,22 @@ impl Cell {
 
                 // are we building a corner or hallway?
                 match firstwall {
-                    SOUTH | NORTH => match side {
-                        WEST | EAST => {
+                    &SOUTH | &NORTH => match side {
+                        &WEST | &EAST => {
                             debug!("Its a Corner!");
                             self.cell_type = CellType::Corner;
                         }
-                        SOUTH | NORTH => {
+                        &SOUTH | &NORTH => {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
                     },
-                    WEST | EAST => match side {
-                        SOUTH | NORTH => {
+                    &WEST | &EAST => match side {
+                        &SOUTH | &NORTH => {
                             debug!("Its a Corner!");
                             self.cell_type = CellType::Corner;
                         }
-                        WEST | EAST => {
+                        &WEST | &EAST => {
                             debug!("Its a Hallway!");
                             self.cell_type = CellType::Hallway;
                         }
@@ -234,7 +243,7 @@ impl Cell {
                 return Err(Error::CellInvalid);
             }
         }
-        self.walls.insert(side, Wall::default());
+        self.walls.insert(side.clone(), Wall::default());
         Ok(self.cell_type.clone())
     }
 
@@ -281,26 +290,54 @@ impl Cell {
 }
 
 impl Warehouse {
-    pub fn add_default_cell(&mut self, pos: Coords2D) {
-        if self.cell_layout.contains_key(&pos) {
-            debug!("Not adding cell, pos {} already filled", pos);
-            return;
+    pub fn add_far_scan_cell(&mut self, pos: Coords2D, mut cell: Cell) {
+        if let Some(c) = self.cell_layout.get_mut(&pos) {
+            debug!(
+                "Not adding cell @ pos {} from far_scan, updating walls",
+                &pos
+            );
+            for dir in cell.walls.keys() {
+                if !c.has_wall(dir) {
+                    _ = c.add_wall(dir);
+                }
+            }
+        } else {
+            debug!(
+                "Adding cell @ pos {} from far_scan walls: {:?}",
+                &pos, &cell.walls
+            );
+
+            // Check neighbors for walls and add wall reciprocally
+            for dir in [&NORTH, &EAST, &SOUTH, &WEST].iter() {
+                let neighbor = pos.neighbor_coords(dir);
+
+                if let Some(neighbor_cell) = self.cell_layout.get(&neighbor) {
+                    if neighbor_cell.has_wall(&dir.opposite()) {
+                        _ = cell.add_wall(dir);
+                    }
+                }
+            }
+
+            self.cell_layout.insert(pos, cell);
         }
-        debug!("Adding default cell at {}", &pos);
-        let cell = Cell::default();
-        self.cell_layout.insert(pos, cell);
     }
 
     pub fn insert_or_update_cell(&mut self, pos: Coords2D, cell: Cell) {
+        if self.cell_layout.contains_key(&pos) {
+            debug!("updating cell @ pos {}", pos);
+        }
+
         self.cell_layout.insert(pos, cell);
     }
 
-    pub fn storage_capacity(&self) -> usize {
-        let mut storage = 0;
+    pub fn storage_capacity(&self) -> (usize, usize) {
+        let mut total = 0;
+        let mut used = 0;
         for (_, c) in self.cell_layout.iter() {
-            storage += c.storage_capacity();
+            total += c.storage_capacity();
+            used += c.occupied_storage();
         }
-        storage
+        (used, total)
     }
 
     pub fn cells(&self) -> usize {
@@ -319,7 +356,6 @@ impl Warehouse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_coords_from_str() {
@@ -359,13 +395,13 @@ mod tests {
         let mut c = Cell::default();
         assert_eq!(c.cell_type, CellType::XCross);
 
-        assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
+        assert_eq!(c.add_wall(&SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
 
-        assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Hallway);
+        assert_eq!(c.add_wall(&NORTH).unwrap(), CellType::Hallway);
         assert_eq!(c.storage_capacity(), 8);
 
-        assert!(c.add_wall(EAST).is_ok());
+        assert!(c.add_wall(&EAST).is_ok());
         assert_eq!(c.cell_type, CellType::DeadEnd);
         assert_eq!(c.storage_capacity(), 12);
 
@@ -376,16 +412,16 @@ mod tests {
     #[test]
     fn test_cell_build_corner() {
         let mut c = Cell::default();
-        assert_eq!(c.add_wall(SOUTH).unwrap(), CellType::TCross);
+        assert_eq!(c.add_wall(&SOUTH).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
-        assert_eq!(c.add_wall(EAST).unwrap(), CellType::Corner);
+        assert_eq!(c.add_wall(&EAST).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
         let mut c2 = Cell::default();
-        assert_eq!(c2.add_wall(EAST).unwrap(), CellType::TCross);
+        assert_eq!(c2.add_wall(&EAST).unwrap(), CellType::TCross);
         assert_eq!(c2.storage_capacity(), 6);
 
-        assert_eq!(c2.add_wall(SOUTH).unwrap(), CellType::Corner);
+        assert_eq!(c2.add_wall(&SOUTH).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
 
         println!("{}", c);
@@ -394,21 +430,21 @@ mod tests {
     #[test]
     fn test_build_box_panic() {
         let mut c = Cell::default();
-        assert_eq!(c.add_wall(WEST).unwrap(), CellType::TCross);
+        assert_eq!(c.add_wall(&WEST).unwrap(), CellType::TCross);
         assert_eq!(c.storage_capacity(), 6);
-        assert_eq!(c.add_wall(NORTH).unwrap(), CellType::Corner);
+        assert_eq!(c.add_wall(&NORTH).unwrap(), CellType::Corner);
         assert_eq!(c.storage_capacity(), 9);
-        assert_eq!(c.add_wall(EAST).unwrap(), CellType::DeadEnd);
+        assert_eq!(c.add_wall(&EAST).unwrap(), CellType::DeadEnd);
         assert_eq!(c.storage_capacity(), 12);
 
-        assert!(c.add_wall(SOUTH).is_err());
+        assert!(c.add_wall(&SOUTH).is_err());
     }
 
     #[test]
     fn test_cell_add_wall_twice() {
         let mut c = Cell::default();
-        assert!(c.add_wall(SOUTH).is_ok());
-        assert!(c.add_wall(SOUTH).is_err());
+        assert!(c.add_wall(&SOUTH).is_ok());
+        assert!(c.add_wall(&SOUTH).is_err());
     }
 
     #[test]
@@ -456,7 +492,7 @@ mod tests {
     #[test]
     fn test_serde_cell() {
         let mut c = Cell::with_id("Q".to_string());
-        c.add_wall(NORTH).unwrap();
+        c.add_wall(&NORTH).unwrap();
         c.put_good_on_shelf("Hydrazine".to_string()).unwrap();
         let ser = serde_json::to_string(&c).unwrap();
         assert_eq!(ser, "{\"id\":\"Q\",\"walls\":{\"NORTH\":{}},\"shelf_inventory\":[\"Hydrazine\"],\"visited\":false,\"cell_type\":\"TCross\"}");

@@ -1,17 +1,30 @@
 pub mod cli;
 pub mod cliplotter;
 pub mod warehouse;
+use bot::FarScanResult;
 use log::{debug, info};
-use serde::Serialize;
-use serde::{de::DeserializeOwned,Deserialize};
-use std::{fs, path::PathBuf};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use warehouse::{Cell, Coords2D, Warehouse};
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
     NORTH = 0,
     EAST = 1,
     SOUTH = 2,
     WEST = 3,
+}
+
+impl Direction {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Direction::NORTH => Direction::SOUTH,
+            Direction::EAST => Direction::WEST,
+            Direction::SOUTH => Direction::NORTH,
+            Direction::WEST => Direction::EAST,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -24,35 +37,7 @@ pub enum Error {
     InvalidBot,
 }
 
-pub const NORTH_LIT: &str = "north";
-pub const EAST_LIT: &str = "east";
-pub const SOUTH_LIT: &str = "south";
-pub const WEST_LIT: &str = "west";
-
-pub const WAREHOUSE_STATE_FILE_NAME: &str = "warehouse.json";
-pub const BOT_STATE_FILE_NAME: &str = "bot.json";
-
-pub fn literal_to_direction(lit: &str) -> Result<Direction, Error> {
-    let lit = lit.to_lowercase();
-    match lit.as_str() {
-        NORTH_LIT => Ok(Direction::NORTH),
-        WEST_LIT => Ok(Direction::WEST),
-        SOUTH_LIT => Ok(Direction::SOUTH),
-        EAST_LIT => Ok(Direction::EAST),
-        &_ => Err(Error::InvalidDirection),
-    }
-}
-
-fn direction_to_literal(direction: &crate::Direction) -> String {
-    match direction {
-        Direction::NORTH => NORTH_LIT.to_string(),
-        Direction::WEST => WEST_LIT.to_string(),
-        Direction::SOUTH => SOUTH_LIT.to_string(),
-        Direction::EAST => EAST_LIT.to_string(),
-    }
-}
-
-fn get_data_dir() -> PathBuf {
+fn get_data_dir() -> std::path::PathBuf {
     if let Some(filepath) = dirs::data_dir() {
         filepath
     } else {
@@ -60,7 +45,6 @@ fn get_data_dir() -> PathBuf {
         std::env::current_dir().expect("current_dir() failed!")
     }
 }
-
 fn save_state<T: Serialize>(object: &T, filename: &str) -> Result<(), std::io::Error> {
     let serialized = serde_json::to_string(object).expect("cannot serialize object");
     let mut filepath = get_data_dir();
@@ -124,9 +108,26 @@ pub fn explore_warehouse_manually(
     direction: crate::Direction,
 ) -> Result<(), Error> {
     if let Err(e) = move_bot_in_warehouse(bot, direction) {
-        log::error!("Bot error occured: {:?}", e);
+        log::error!("Bot error occured moving: {:?}", e);
         return Err(e);
     }
+
+    match bot.scan_far() {
+        Err(e) => {
+            log::error!("Bot error occured scanning far: {:?}", e);
+            Err(e)
+        }
+        Ok(farscan) => match update_warehouse_from_scan_far(warehouse, farscan, &bot.locate()) {
+            Ok(_) => update_warehouse_at_bot_postion(bot, warehouse),
+            Err(e) => Err(e),
+        },
+    }
+}
+
+pub fn update_warehouse_at_bot_postion(
+    bot: &mut impl bot::Commands,
+    warehouse: &mut Warehouse,
+) -> Result<(), Error> {
     match bot.scan_near() {
         Ok(c) => {
             warehouse.insert_or_update_cell(bot.locate(), c);
@@ -139,11 +140,55 @@ pub fn explore_warehouse_manually(
     }
 }
 
+pub fn get_coords_in_direction(
+    start: &Coords2D,
+    direction: &crate::Direction,
+    steps: Option<&i32>,
+) -> Result<Vec<Coords2D>, Error> {
+    let mut ret = Vec::<Coords2D>::new();
+
+    if let Some(steps) = steps {
+        log::debug!("{} steps to {:?}", steps, &direction);
+        if *steps < 0 {
+            log::error!("Steps < 0 don't make sense!");
+            return Err(Error::ClientError);
+        }
+        if *steps > 0 {
+            for i in 1..=(*steps) {
+                ret.push(start.neighbor_coords_distance(direction, i));
+            }
+        }
+    }
+    Ok(ret)
+}
+
+pub fn update_warehouse_from_scan_far(
+    warehouse: &mut Warehouse,
+    scaninfo: FarScanResult,
+    botcoords: &Coords2D,
+) -> Result<(), Error> {
+    for dir in [
+        Direction::NORTH,
+        Direction::EAST,
+        Direction::SOUTH,
+        Direction::WEST,
+    ] {
+        let new_coords = get_coords_in_direction(botcoords, &dir, scaninfo.get(&dir))?;
+        for i in &new_coords {
+            let mut c = Cell::default();
+            if i == new_coords.last().unwrap() {
+                _ = c.add_wall(&dir);
+            }
+            warehouse.add_far_scan_cell(i.clone(), c);
+        }
+    }
+    Ok(())
+}
+
 pub mod bot {
     use crate::{
         warehouse::{Cell, Coords2D},
-        Direction::{EAST, NORTH, SOUTH, WEST},
-        Error,
+        Direction, Error,
     };
     use log::debug;
     use serde::{Deserialize, Serialize};
@@ -159,14 +204,17 @@ pub mod bot {
         fn go_east(&mut self) -> Result<(), Error>;
 
         fn scan_near(&self) -> Result<Cell, Error>;
+        fn scan_far(&self) -> Result<FarScanResult, Error>;
         fn reset(&mut self) -> Result<(), Error>;
     }
+
+    pub type FarScanResult = HashMap<Direction, i32>;
 
     #[derive(Serialize, Deserialize)]
     pub struct MockBot {
         pub bot: String,
         pub location: Coords2D,
-        call_count: HashMap<isize, i32>,
+        call_count: HashMap<Direction, i32>,
     }
 
     impl Default for MockBot {
@@ -175,17 +223,17 @@ pub mod bot {
                 bot: "paul".to_string(),
                 location: Coords2D { x: 0, y: 0 },
                 call_count: HashMap::from([
-                    (NORTH as isize, 0),
-                    (WEST as isize, 0),
-                    (SOUTH as isize, 0),
-                    (EAST as isize, 0),
+                    (Direction::NORTH, 0),
+                    (Direction::WEST, 0),
+                    (Direction::SOUTH, 0),
+                    (Direction::EAST, 0),
                 ]),
             }
         }
     }
 
     impl MockBot {
-        pub fn get_call_count(&self) -> &HashMap<isize, i32> {
+        pub fn get_call_count(&self) -> &HashMap<Direction, i32> {
             &self.call_count
         }
 
@@ -229,6 +277,11 @@ pub mod bot {
 
         fn scan_near(&self) -> Result<Cell, Error> {
             debug!("Scan Near");
+            Err(Error::ScanFailed)
+        }
+
+        fn scan_far(&self) -> Result<FarScanResult, Error> {
+            debug!("scan far");
             Err(Error::ScanFailed)
         }
 
