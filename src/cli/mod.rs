@@ -118,6 +118,7 @@ impl<T: Commands + Serialize + DeserializeOwned> Cli<T> {
                 Ok(cx) => Ok(cx.to_string()),
                 Err(e) => Err(command_error_to_cli_error(e)),
             },
+            "locate" => Ok(self.executor.locate().to_string()),
             "far" => {
                 let far_scan = self.executor.scan_far().unwrap();
                 let info = format!("{:?}", &far_scan);

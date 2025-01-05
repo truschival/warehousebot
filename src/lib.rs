@@ -130,6 +130,7 @@ pub fn update_warehouse_at_bot_postion(
 ) -> Result<(), Error> {
     match bot.scan_near() {
         Ok(c) => {
+            debug!("update warehouse with results form scan_near(): {}", &c);
             warehouse.insert_or_update_cell(bot.locate(), c);
             Ok(())
         }
@@ -167,6 +168,8 @@ pub fn update_warehouse_from_scan_far(
     scaninfo: FarScanResult,
     botcoords: &Coords2D,
 ) -> Result<(), Error> {
+    log::debug!("update_warehouse_form_scan_far {:?}", &scaninfo);
+
     for dir in [
         Direction::NORTH,
         Direction::EAST,

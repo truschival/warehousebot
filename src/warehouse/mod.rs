@@ -185,6 +185,10 @@ impl Cell {
         self.walls.contains_key(side)
     }
 
+    pub fn get_walls(&self) -> Vec<Direction> {
+        self.walls.keys().cloned().collect()
+    }
+
     pub fn add_wall(&mut self, side: &Direction) -> Result<CellType, Error> {
         // I can't use enum as key in hashmap... convert back
         // let side_str = direction_to_literal(&side);
@@ -290,41 +294,62 @@ impl Cell {
 }
 
 impl Warehouse {
-    pub fn add_far_scan_cell(&mut self, pos: Coords2D, mut cell: Cell) {
-        if let Some(c) = self.cell_layout.get_mut(&pos) {
-            debug!(
-                "Not adding cell @ pos {} from far_scan, updating walls",
-                &pos
-            );
-            for dir in cell.walls.keys() {
-                if !c.has_wall(dir) {
-                    _ = c.add_wall(dir);
+    pub fn add_far_scan_cell(&mut self, pos: Coords2D, mut far_scanned: Cell) {
+        debug!(
+            "add_far_scan_cell @{} - with walls {:?}",
+            &pos, &far_scanned.walls
+        );
+        // Cell was detected before, but maybe from different angle
+        if let Some(existing_cell) = self.cell_layout.get_mut(&pos) {
+            debug!(" Not adding cell @{} updating walls", &pos);
+            for dir in far_scanned.walls.keys() {
+                // Check if the neighbor cells have wallse where this cell has walls, if not add it receprocally
+                if !existing_cell.has_wall(dir) {
+                    _ = existing_cell.add_wall(dir);
                 }
             }
         } else {
-            debug!(
-                "Adding cell @ pos {} from far_scan walls: {:?}",
-                &pos, &cell.walls
-            );
+            debug!(" New Cell @{} - checking for neighbors", &pos,);
 
             // Check neighbors for walls and add wall reciprocally
-            for dir in [&NORTH, &EAST, &SOUTH, &WEST].iter() {
-                let neighbor = pos.neighbor_coords(dir);
+            for dir in [NORTH, EAST, SOUTH, WEST].iter() {
+                let neighbor_coords = pos.neighbor_coords(dir);
 
-                if let Some(neighbor_cell) = self.cell_layout.get(&neighbor) {
-                    if neighbor_cell.has_wall(&dir.opposite()) {
-                        _ = cell.add_wall(dir);
+                if let Some(neighbor_cell) = self.cell_layout.get(&neighbor_coords) {
+                    debug!("  neighbor {:?} (@{})", &dir, &neighbor_coords);
+                    if neighbor_cell.has_wall(&dir.opposite()) && !far_scanned.has_wall(&dir) {
+                        debug!(
+                            "  has {:?} wall but far_scanned not -> adding",
+                            &dir.opposite()
+                        );
+                        _ = far_scanned.add_wall(dir);
                     }
                 }
             }
-
-            self.cell_layout.insert(pos, cell);
+            debug!(" walls of new cell {:?}", &far_scanned.walls);
+            self.cell_layout.insert(pos, far_scanned);
         }
     }
 
     pub fn insert_or_update_cell(&mut self, pos: Coords2D, cell: Cell) {
         if self.cell_layout.contains_key(&pos) {
-            debug!("updating cell @ pos {}", pos);
+            debug!("updating cell @ pos {} with {}", &pos, &cell);
+        }
+        for dir in cell.get_walls() {
+            let neighbors_coords = pos.neighbor_coords(&dir);
+            if let Some(neighbor_cell) = self.cell_layout.get_mut(&neighbors_coords) {
+                debug!(
+                    "  neighbor {:?}  : {:?}",
+                    &neighbors_coords,
+                    neighbor_cell.get_walls()
+                );
+                if !neighbor_cell.has_wall(&dir.opposite()) {
+                    debug!(" add wall for neighbor {:?}", dir.opposite());
+                    neighbor_cell
+                        .add_wall(&dir.opposite())
+                        .expect("should not happen");
+                }
+            }
         }
 
         self.cell_layout.insert(pos, cell);
