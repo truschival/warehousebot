@@ -1,17 +1,87 @@
 pub mod cli;
 pub mod cliplotter;
 pub mod warehouse;
-use log::{debug, info};
-use serde::Serialize;
-use serde::{de::DeserializeOwned,Deserialize};
-use std::{fs, path::PathBuf};
+use bot::FarScanResult;
+use log::{debug, info, warn};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use warehouse::{Cell, Warehouse};
 
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
     NORTH = 0,
     EAST = 1,
     SOUTH = 2,
     WEST = 3,
+}
+
+impl Direction {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Direction::NORTH => Direction::SOUTH,
+            Direction::EAST => Direction::WEST,
+            Direction::SOUTH => Direction::NORTH,
+            Direction::WEST => Direction::EAST,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize, Clone, Default)]
+pub struct Coords2D {
+    pub x: i32,
+    pub y: i32,
+}
+impl Coords2D {
+    pub fn neighbor_coords(&self, dir: &Direction) -> Self {
+        self.neighbor_coords_distance(dir, 1)
+    }
+
+    pub fn neighbor_coords_distance(&self, dir: &Direction, steps: i32) -> Self {
+        if steps < 0 {
+            warn!("consider positive steps for neighbor_coords and use opposite direction");
+        }
+        match dir {
+            Direction::NORTH => Self {
+                x: self.x,
+                y: self.y - steps,
+            },
+            Direction::EAST => Self {
+                x: self.x + steps,
+                y: self.y,
+            },
+            Direction::SOUTH => Self {
+                x: self.x,
+                y: self.y + steps,
+            },
+            Direction::WEST => Self {
+                x: self.x - steps,
+                y: self.y,
+            },
+        }
+    }
+
+    pub fn from_string(stringrep: &str) -> Option<Self> {
+        let tokens: Vec<&str> = stringrep.split(",").collect();
+        if tokens.len() < 2 {
+            return None;
+        }
+
+        Some(Self {
+            x: tokens[0]
+                .parse()
+                .unwrap_or_else(|_| panic!("expected i32 for yx got {}", tokens[0])),
+            y: tokens[1]
+                .parse()
+                .unwrap_or_else(|_| panic!("expected i32 for y got {}", tokens[1])),
+        })
+    }
+}
+
+impl std::fmt::Display for Coords2D {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{},{}", self.x, self.y)
+    }
 }
 
 #[derive(Debug)]
@@ -22,37 +92,10 @@ pub enum Error {
     ScanFailed,
     ClientError,
     InvalidBot,
+    InvalidArgument,
 }
 
-pub const NORTH_LIT: &str = "north";
-pub const EAST_LIT: &str = "east";
-pub const SOUTH_LIT: &str = "south";
-pub const WEST_LIT: &str = "west";
-
-pub const WAREHOUSE_STATE_FILE_NAME: &str = "warehouse.json";
-pub const BOT_STATE_FILE_NAME: &str = "bot.json";
-
-pub fn literal_to_direction(lit: &str) -> Result<Direction, Error> {
-    let lit = lit.to_lowercase();
-    match lit.as_str() {
-        NORTH_LIT => Ok(Direction::NORTH),
-        WEST_LIT => Ok(Direction::WEST),
-        SOUTH_LIT => Ok(Direction::SOUTH),
-        EAST_LIT => Ok(Direction::EAST),
-        &_ => Err(Error::InvalidDirection),
-    }
-}
-
-fn direction_to_literal(direction: &crate::Direction) -> String {
-    match direction {
-        Direction::NORTH => NORTH_LIT.to_string(),
-        Direction::WEST => WEST_LIT.to_string(),
-        Direction::SOUTH => SOUTH_LIT.to_string(),
-        Direction::EAST => EAST_LIT.to_string(),
-    }
-}
-
-fn get_data_dir() -> PathBuf {
+fn get_data_dir() -> std::path::PathBuf {
     if let Some(filepath) = dirs::data_dir() {
         filepath
     } else {
@@ -60,7 +103,6 @@ fn get_data_dir() -> PathBuf {
         std::env::current_dir().expect("current_dir() failed!")
     }
 }
-
 fn save_state<T: Serialize>(object: &T, filename: &str) -> Result<(), std::io::Error> {
     let serialized = serde_json::to_string(object).expect("cannot serialize object");
     let mut filepath = get_data_dir();
@@ -96,9 +138,20 @@ fn load_state<T: DeserializeOwned>(filename: &str) -> Option<T> {
 
 pub fn move_bot_in_warehouse(
     bot: &mut impl bot::Commands,
-    direction: crate::Direction,
+    warehouse: &Warehouse,
+    dir: crate::Direction,
 ) -> Result<(), Error> {
-    match direction {
+    let pos = bot.locate();
+    if let Some(c) = warehouse.get_cell(&pos) {
+        if c.has_wall(&dir) {
+            log::info!("Bot will not move '{:?}' - there is a wall.", &dir);
+            return Err(Error::HitWall);
+        }
+    } else {
+        panic!("Bot is not in warehouse!");
+    }
+
+    match dir {
         Direction::NORTH => {
             debug!("move north");
             bot.go_north()
@@ -123,12 +176,30 @@ pub fn explore_warehouse_manually(
     warehouse: &mut warehouse::Warehouse,
     direction: crate::Direction,
 ) -> Result<(), Error> {
-    if let Err(e) = move_bot_in_warehouse(bot, direction) {
-        log::error!("Bot error occured: {:?}", e);
+    if let Err(e) = move_bot_in_warehouse(bot, warehouse, direction) {
+        log::error!("Bot error occured moving: {:?}", e);
         return Err(e);
     }
+
+    match bot.scan_far() {
+        Err(e) => {
+            log::error!("Bot error occured scanning far: {:?}", e);
+            Err(e)
+        }
+        Ok(farscan) => match update_warehouse_from_scan_far(warehouse, farscan, &bot.locate()) {
+            Ok(_) => update_warehouse_at_bot_postion(bot, warehouse),
+            Err(e) => Err(e),
+        },
+    }
+}
+
+pub fn update_warehouse_at_bot_postion(
+    bot: &mut impl bot::Commands,
+    warehouse: &mut Warehouse,
+) -> Result<(), Error> {
     match bot.scan_near() {
         Ok(c) => {
+            debug!("update warehouse with results form scan_near(): {}", &c);
             warehouse.insert_or_update_cell(bot.locate(), c);
             Ok(())
         }
@@ -139,15 +210,58 @@ pub fn explore_warehouse_manually(
     }
 }
 
+pub fn get_coords_in_direction(
+    start: &Coords2D,
+    direction: &crate::Direction,
+    steps: Option<&i32>,
+) -> Result<Vec<Coords2D>, Error> {
+    let mut ret = Vec::<Coords2D>::new();
+
+    if let Some(steps) = steps {
+        log::debug!("{} steps to {:?}", steps, &direction);
+        if *steps < 0 {
+            log::error!("Steps < 0 don't make sense!");
+            return Err(Error::InvalidArgument);
+        }
+        if *steps > 0 {
+            for i in 1..=(*steps) {
+                ret.push(start.neighbor_coords_distance(direction, i));
+            }
+        }
+    }
+    Ok(ret)
+}
+
+pub fn update_warehouse_from_scan_far(
+    warehouse: &mut Warehouse,
+    scaninfo: FarScanResult,
+    botcoords: &Coords2D,
+) -> Result<(), Error> {
+    log::debug!("update_warehouse_form_scan_far {:?}", &scaninfo);
+
+    for dir in [
+        Direction::NORTH,
+        Direction::EAST,
+        Direction::SOUTH,
+        Direction::WEST,
+    ] {
+        let new_coords = get_coords_in_direction(botcoords, &dir, scaninfo.get(&dir))?;
+        for i in &new_coords {
+            let mut c = Cell::default();
+            if i == new_coords.last().unwrap() {
+                _ = c.add_wall(&dir);
+            }
+            warehouse.add_far_scan_cell(i.clone(), c);
+        }
+    }
+    Ok(())
+}
+
 pub mod bot {
-    use crate::{
-        warehouse::{Cell, Coords2D},
-        Direction::{EAST, NORTH, SOUTH, WEST},
-        Error,
-    };
+    use crate::{warehouse::Cell, Coords2D, Direction, Error};
     use log::debug;
     use serde::{Deserialize, Serialize};
-    use std::{collections::HashMap, fs, path::PathBuf};
+    use std::collections::HashMap;
 
     pub mod rest;
 
@@ -159,14 +273,17 @@ pub mod bot {
         fn go_east(&mut self) -> Result<(), Error>;
 
         fn scan_near(&self) -> Result<Cell, Error>;
+        fn scan_far(&self) -> Result<FarScanResult, Error>;
         fn reset(&mut self) -> Result<(), Error>;
     }
+
+    pub type FarScanResult = HashMap<Direction, i32>;
 
     #[derive(Serialize, Deserialize)]
     pub struct MockBot {
         pub bot: String,
         pub location: Coords2D,
-        call_count: HashMap<isize, i32>,
+        call_count: HashMap<Direction, i32>,
     }
 
     impl Default for MockBot {
@@ -175,26 +292,18 @@ pub mod bot {
                 bot: "paul".to_string(),
                 location: Coords2D { x: 0, y: 0 },
                 call_count: HashMap::from([
-                    (NORTH as isize, 0),
-                    (WEST as isize, 0),
-                    (SOUTH as isize, 0),
-                    (EAST as isize, 0),
+                    (Direction::NORTH, 0),
+                    (Direction::WEST, 0),
+                    (Direction::SOUTH, 0),
+                    (Direction::EAST, 0),
                 ]),
             }
         }
     }
 
     impl MockBot {
-        pub fn get_call_count(&self) -> &HashMap<isize, i32> {
+        pub fn get_call_count(&self) -> &HashMap<Direction, i32> {
             &self.call_count
-        }
-
-        pub fn from_file(path: PathBuf) -> Option<Self> {
-            if let Ok(s) = fs::read_to_string(path) {
-                let ds: Self = serde_json::from_str(&s).unwrap();
-                return Some(ds);
-            }
-            None
         }
     }
 
@@ -232,10 +341,104 @@ pub mod bot {
             Err(Error::ScanFailed)
         }
 
+        fn scan_far(&self) -> Result<FarScanResult, Error> {
+            debug!("scan far");
+            Err(Error::ScanFailed)
+        }
+
         fn reset(&mut self) -> Result<(), Error> {
             debug!("Reset Bot");
             self.location = Coords2D::default();
             Ok(())
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use Direction::{EAST, NORTH, SOUTH, WEST};
+
+    #[test]
+    fn test_get_neighbor_coords_single_step() {
+        let pos = Coords2D { x: 1, y: -1 };
+        let south = get_coords_in_direction(&pos, &SOUTH, Some(&1));
+        let south = south.unwrap();
+        assert_eq!(south.len(), 1);
+        assert_eq!(south.get(0).unwrap(), &Coords2D { x: 1, y: 0 });
+
+        let north = get_coords_in_direction(&pos, &NORTH, Some(&1));
+        let north = north.unwrap();
+        assert_eq!(north.len(), 1);
+        assert_eq!(north.get(0).unwrap(), &Coords2D { x: 1, y: -2 });
+
+        let east = get_coords_in_direction(&pos, &EAST, Some(&1));
+        let east = east.unwrap();
+        assert_eq!(east.len(), 1);
+        assert_eq!(east.get(0).unwrap(), &Coords2D { x: 2, y: -1 });
+
+        let west = get_coords_in_direction(&pos, &WEST, Some(&1));
+        let west = west.unwrap();
+        assert_eq!(west.len(), 1);
+        assert_eq!(west.get(0).unwrap(), &Coords2D { x: 0, y: -1 });
+    }
+
+    #[test]
+    fn test_get_neighbor_coords_multi_step() {
+        let pos = Coords2D { x: 1, y: -1 };
+        let south = get_coords_in_direction(&pos, &SOUTH, Some(&2));
+        let south = south.unwrap();
+        assert_eq!(south.len(), 2);
+        assert_eq!(south.get(0).unwrap(), &Coords2D { x: 1, y: 0 });
+        assert_eq!(south.get(1).unwrap(), &Coords2D { x: 1, y: 1 });
+
+        let north = get_coords_in_direction(&pos, &NORTH, Some(&1));
+        let north = north.unwrap();
+        assert_eq!(north.len(), 1);
+        assert_eq!(north.get(0).unwrap(), &Coords2D { x: 1, y: -2 });
+    }
+
+    #[test]
+    fn test_get_neighbor_coords_negative_step() {
+        let pos = Coords2D { x: 1, y: -1 };
+        let south = get_coords_in_direction(&pos, &SOUTH, Some(&-3));
+        assert!(south.is_err());
+    }
+
+    #[test]
+    fn test_fill_neighbor_walls_from_new_cell() {
+        let mut warehouse = Warehouse::default();
+        warehouse.insert_or_update_cell(Coords2D { x: -2, y: 0 }, Cell::default()); // north west
+        warehouse.insert_or_update_cell(Coords2D { x: -2, y: 1 }, Cell::default()); // west
+
+        warehouse.insert_or_update_cell(Coords2D { x: -1, y: 0 }, Cell::default()); //north
+        warehouse.insert_or_update_cell(Coords2D { x: -1, y: 2 }, Cell::default()); //south
+
+        warehouse.insert_or_update_cell(Coords2D { x: 0, y: 1 }, Cell::default()); //east
+
+        let pos = Coords2D { x: -1, y: 1 };
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&EAST);
+        _ = cell.add_wall(&WEST);
+        warehouse.insert_or_update_cell(pos, cell);
+
+        // corner has no walls
+        let corner = warehouse.get_cell(&Coords2D { x: -2, y: 0 }).unwrap();
+        assert!(corner.get_walls().is_empty());
+        // West neighbor should have east wall
+        let west_neighbor = warehouse.get_cell(&Coords2D { x: -2, y: 1 }).unwrap();
+        assert_eq!(west_neighbor.get_walls().len(), 1);
+        assert!(west_neighbor.has_wall(&EAST));
+
+        // north should also have no walls
+        let north_neighbor = warehouse.get_cell(&Coords2D { x: -1, y: 0 }).unwrap();
+        assert!(north_neighbor.get_walls().is_empty());
+
+        // north should also have no walls
+        let south_neighbor = warehouse.get_cell(&Coords2D { x: -1, y: 2 }).unwrap();
+        assert!(south_neighbor.get_walls().is_empty());
+
+        let east_neighbor = warehouse.get_cell(&Coords2D { x: 0, y: 1 }).unwrap();
+        assert_eq!(east_neighbor.get_walls().len(), 1);
+        assert!(east_neighbor.has_wall(&WEST));
     }
 }

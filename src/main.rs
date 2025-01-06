@@ -11,12 +11,14 @@ fn main() -> rustyline::Result<()> {
         .without_timestamps()
         .with_module_level("rustyline", log::LevelFilter::Error)
         .with_module_level("reqwest", log::LevelFilter::Info)
+        .with_module_level("warehousebot::bot::rest", log::LevelFilter::Info)
+        .with_module_level("warehousebot::warehouse", log::LevelFilter::Debug)
+        .with_module_level("warehousebot", log::LevelFilter::Debug)
         .init()
         .expect("Logger not initialized!");
 
     let mut rl = DefaultEditor::new()?;
     rl.set_edit_mode(rustyline::EditMode::Emacs);
-
 
     #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
@@ -34,6 +36,16 @@ Copyright (c) 1972 - Warehouse Control Ltd.
     let executor = RestBot::default();
     let mut cli = Cli::new(executor);
 
+    match cli.init_state() {
+        Ok(_) => {}
+        Err(CliError::CommandFailed(msg)) => {
+            println!("{}{}", "Command failed : ".red(), msg);
+        }
+        _ => {
+            panic!("Initialization failed!")
+        }
+    }
+
     loop {
         let readline = rl.readline(">> ");
         match readline {
@@ -44,7 +56,7 @@ Copyright (c) 1972 - Warehouse Control Ltd.
 
                 match cli.dispatch_command_for_string(&line) {
                     Ok(res) => {
-                        println!("Success {}", res);
+                        println!("{}", res);
                         // only add successful commands to history
                         rl.add_history_entry(line.as_str())?;
                     }
