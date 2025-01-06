@@ -1,8 +1,5 @@
 use super::{Commands, Error, FarScanResult};
-use crate::{
-    warehouse::{Cell, Coords2D},
-    Direction,
-};
+use crate::{warehouse::Cell, Coords2D, Direction};
 use log::{debug, error, warn};
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -226,7 +223,7 @@ impl Default for RestBot {
 }
 
 impl Commands for RestBot {
-    fn locate(&self) -> crate::warehouse::Coords2D {
+    fn locate(&self) -> Coords2D {
         self.location.clone()
     }
     fn go_east(&mut self) -> Result<(), Error> {

@@ -1,6 +1,6 @@
-use crate::Direction;
 use crate::Direction::{EAST, NORTH, SOUTH, WEST};
-use log::{debug, error, warn};
+use crate::{Coords2D, Direction};
+use log::{debug, error};
 use serde::de::{Deserializer, MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -15,7 +15,7 @@ pub type CellGrid = HashMap<Coords2D, Cell>;
 pub struct Warehouse {
     #[serde(serialize_with = "serialize_cellgrid")]
     #[serde(deserialize_with = "deserialize_cellgrid")]
-    cell_layout: CellGrid,
+    cell_grid: CellGrid,
 }
 
 //Hashmap with Coords as key does not serialize nicely
@@ -69,57 +69,6 @@ pub enum Error {
     InvalidWall,
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Serialize, Deserialize, Clone, Default)]
-pub struct Coords2D {
-    pub x: i32,
-    pub y: i32,
-}
-impl Coords2D {
-    pub fn neighbor_coords(&self, dir: &Direction) -> Self {
-        self.neighbor_coords_distance(dir, 1)
-    }
-
-    pub fn neighbor_coords_distance(&self, dir: &Direction, steps: i32) -> Self {
-        if steps < 0 {
-            warn!("consider positive steps for neighbor_coords and use opposite direction");
-        }
-        match dir {
-            NORTH => Self {
-                x: self.x,
-                y: self.y - steps,
-            },
-            EAST => Self {
-                x: self.x + steps,
-                y: self.y,
-            },
-            SOUTH => Self {
-                x: self.x,
-                y: self.y + steps,
-            },
-            WEST => Self {
-                x: self.x - steps,
-                y: self.y,
-            },
-        }
-    }
-
-    pub fn from_string(stringrep: &str) -> Option<Self> {
-        let tokens: Vec<&str> = stringrep.split(",").collect();
-        if tokens.len() < 2 {
-            return None;
-        }
-
-        Some(Self {
-            x: tokens[0]
-                .parse()
-                .unwrap_or_else(|_| panic!("expected i32 for yx got {}", tokens[0])),
-            y: tokens[1]
-                .parse()
-                .unwrap_or_else(|_| panic!("expected i32 for y got {}", tokens[1])),
-        })
-    }
-}
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum CellType {
     XCross,
@@ -137,12 +86,6 @@ pub struct Cell {
     shelf_inventory: Vec<String>,
     visited: bool,
     cell_type: CellType,
-}
-
-impl std::fmt::Display for Coords2D {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{},{}", self.x, self.y)
-    }
 }
 
 impl std::fmt::Display for Cell {
@@ -300,7 +243,7 @@ impl Warehouse {
             &pos, &far_scanned.walls
         );
         // Cell was detected before, but maybe from different angle
-        if let Some(existing_cell) = self.cell_layout.get_mut(&pos) {
+        if let Some(existing_cell) = self.cell_grid.get_mut(&pos) {
             debug!(" Not adding cell @{} updating walls", &pos);
             for dir in far_scanned.walls.keys() {
                 // Check if the neighbor cells have wallse where this cell has walls, if not add it receprocally
@@ -315,9 +258,9 @@ impl Warehouse {
             for dir in [NORTH, EAST, SOUTH, WEST].iter() {
                 let neighbor_coords = pos.neighbor_coords(dir);
 
-                if let Some(neighbor_cell) = self.cell_layout.get(&neighbor_coords) {
+                if let Some(neighbor_cell) = self.cell_grid.get(&neighbor_coords) {
                     debug!("  neighbor {:?} (@{})", &dir, &neighbor_coords);
-                    if neighbor_cell.has_wall(&dir.opposite()) && !far_scanned.has_wall(&dir) {
+                    if neighbor_cell.has_wall(&dir.opposite()) && !far_scanned.has_wall(dir) {
                         debug!(
                             "  has {:?} wall but far_scanned not -> adding",
                             &dir.opposite()
@@ -327,17 +270,17 @@ impl Warehouse {
                 }
             }
             debug!(" walls of new cell {:?}", &far_scanned.walls);
-            self.cell_layout.insert(pos, far_scanned);
+            self.cell_grid.insert(pos, far_scanned);
         }
     }
 
     pub fn insert_or_update_cell(&mut self, pos: Coords2D, cell: Cell) {
-        if self.cell_layout.contains_key(&pos) {
+        if self.cell_grid.contains_key(&pos) {
             debug!("updating cell @ pos {} with {}", &pos, &cell);
         }
         for dir in cell.get_walls() {
             let neighbors_coords = pos.neighbor_coords(&dir);
-            if let Some(neighbor_cell) = self.cell_layout.get_mut(&neighbors_coords) {
+            if let Some(neighbor_cell) = self.cell_grid.get_mut(&neighbors_coords) {
                 debug!(
                     "  neighbor {:?}  : {:?}",
                     &neighbors_coords,
@@ -352,29 +295,33 @@ impl Warehouse {
             }
         }
 
-        self.cell_layout.insert(pos, cell);
+        self.cell_grid.insert(pos, cell);
     }
 
     pub fn storage_capacity(&self) -> (usize, usize) {
         let mut total = 0;
         let mut used = 0;
-        for (_, c) in self.cell_layout.iter() {
+        for (_, c) in self.cell_grid.iter() {
             total += c.storage_capacity();
             used += c.occupied_storage();
         }
         (used, total)
     }
 
-    pub fn cells(&self) -> usize {
-        self.cell_layout.len()
+    pub fn cell_count(&self) -> usize {
+        self.cell_grid.len()
+    }
+
+    pub fn get_cell(&self, pos: &Coords2D) -> Option<&Cell> {
+        self.cell_grid.get(pos)
     }
 
     pub fn get_cellgrid(&self) -> &CellGrid {
-        &self.cell_layout
+        &self.cell_grid
     }
     pub fn reset(&mut self) {
         debug!("reset map!");
-        self.cell_layout.clear();
+        self.cell_grid.clear();
     }
 }
 
@@ -431,7 +378,19 @@ mod tests {
         assert_eq!(c.storage_capacity(), 12);
 
         assert_eq!(c.walls.len(), 3);
-        assert!(c.walls.contains_key(&SOUTH))
+        assert!(c.has_wall(&SOUTH));
+    }
+
+    #[test]
+    fn test_get_wall() {
+        let mut c = Cell::default();
+        c.add_wall(&NORTH).unwrap();
+        c.add_wall(&EAST).unwrap();
+
+        assert!(!c.has_wall(&SOUTH));
+        assert_eq!(c.get_walls().len(), 2);
+        assert!(c.get_walls().contains(&NORTH));
+        assert!(c.get_walls().contains(&EAST));
     }
 
     #[test]
@@ -531,7 +490,7 @@ mod tests {
         let mut wh = Warehouse::default();
         wh.insert_or_update_cell(Coords2D { x: 5, y: 7 }, Cell::with_id("A".to_string()));
         let ser = serde_json::to_string(&wh).unwrap();
-        assert_eq!(ser, "{\"cell_layout\":{\"5,7\":{\"id\":\"A\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
+        assert_eq!(ser, "{\"cell_grid\":{\"5,7\":{\"id\":\"A\",\"walls\":{},\"shelf_inventory\":[],\"visited\":false,\"cell_type\":\"XCross\"}}}");
 
         let wh2: Warehouse = serde_json::from_str(ser.as_str()).unwrap();
         assert_eq!(wh, wh2);

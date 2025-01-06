@@ -27,6 +27,7 @@ fn command_error_to_cli_error(err: Error) -> CliError {
         Error::ScanFailed => CliError::CommandFailed("Scan failed".to_string()),
         Error::InvalidBot => CliError::CommandFailed("No such bot!".to_string()),
         Error::InvalidDirection => CliError::CommandFailed("Invalid Direction".to_string()),
+        Error::InvalidArgument => CliError::CommandFailed("Invalid argument in call".to_string()),
         Error::ClientError => {
             CliError::CommandFailed("Something is really bad - better abort".to_string())
         }
@@ -140,7 +141,7 @@ impl<T: Commands + Serialize + DeserializeOwned> Cli<T> {
         let storage = self.warehouse.storage_capacity();
         format!(
             "#cells: {} storage: {}/{}\n",
-            self.warehouse.cells(),
+            self.warehouse.cell_count(),
             storage.0,
             storage.1
         )
