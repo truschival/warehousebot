@@ -1,0 +1,55 @@
+variables:
+  RUST_BACKTRACE: "full"
+  IMAGE: "registry.gitlab.com/truschival/rust-buildcontainer:1.83-coverage2"
+  COVERAGE_INFO_DIR: "./target/coverage"
+
+stages:
+  - test
+  - build
+
+.cargo-lcov-base:
+  image: $IMAGE
+  stage: test
+  variables:
+    RUSTFLAGS: "-C instrument-coverage -Dwarnings"
+    LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
+  cache:
+    paths: [ '/root/.cargo', '/root/.cache', './target' ]
+  before_script:
+    - mkdir -p $COVERAGE_INFO_DIR
+
+cargo-test:
+  extends: .cargo-lcov-base
+  variables:
+    NEXTEST_CONFIG_FILE: "./target/nextest/config.toml"
+  script:
+    - echo "Configuring nextest"
+    - mkdir -p ./target/nextest
+    - echo '[profile.ci.junit]' > $NEXTEST_CONFIG_FILE
+    - echo 'path = "junit.xml"' >> $NEXTEST_CONFIG_FILE
+    - echo 'fail-fast = false' >> $NEXTEST_CONFIG_FILE
+    - cargo llvm-cov nextest --all-features --config-file $NEXTEST_CONFIG_FILE --profile ci
+  artifacts:
+    reports:
+      junit: ./target/nextest/ci/junit.xml
+
+cargo-coverage:
+  extends: .cargo-lcov-base
+  needs: ["cargo-test"]
+  variables:
+    COBERTURA_FILE: "$COVERAGE_INFO_DIR/coverage.xml"
+    LCOV_INFO_FILE: "$COVERAGE_INFO_DIR/coverage.lcov"
+  script:
+    # cobertura for gitlab
+    - cargo llvm-cov report --cobertura --output-path=$COBERTURA_FILE
+     # LCOV summary to parse coverage
+    - cargo llvm-cov report --lcov --output-path $LCOV_INFO_FILE
+    - lcov --summary $LCOV_INFO_FILE
+  coverage: '/\s*lines\.*:\s*([\d\.]+%)/'
+  artifacts:
+    paths:
+      - $COVERAGE_INFO_DIR
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: $COBERTURA_FILE
