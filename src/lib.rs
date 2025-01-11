@@ -61,6 +61,13 @@ impl Coords2D {
         }
     }
 
+    fn get_north_west(pos: &Self) -> Self {
+        Coords2D {
+            x: pos.x - 1,
+            y: pos.y - 1,
+        }
+    }
+
     pub fn from_string(stringrep: &str) -> Option<Self> {
         let tokens: Vec<&str> = stringrep.split(",").collect();
         if tokens.len() < 2 {
@@ -259,8 +266,6 @@ pub fn update_warehouse_from_scan_far(
 
 pub mod bot {
     use crate::{warehouse::Cell, Coords2D, Direction, Error};
-    use log::debug;
-    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
     pub mod rest;
@@ -278,12 +283,20 @@ pub mod bot {
     }
 
     pub type FarScanResult = HashMap<Direction, i32>;
+}
+#[cfg(test)]
+mod tests {
+    use super::bot::*;
+    use super::*;
+    use std::collections::HashMap;
+    use Direction::{EAST, NORTH, SOUTH, WEST};
 
     #[derive(Serialize, Deserialize)]
     pub struct MockBot {
         pub bot: String,
         pub location: Coords2D,
         call_count: HashMap<Direction, i32>,
+        pub enable_error: bool,
     }
 
     impl Default for MockBot {
@@ -297,6 +310,7 @@ pub mod bot {
                     (Direction::SOUTH, 0),
                     (Direction::EAST, 0),
                 ]),
+                enable_error: false,
             }
         }
     }
@@ -315,24 +329,28 @@ pub mod bot {
         fn go_east(&mut self) -> Result<(), Error> {
             debug!("go_east");
             self.location.x += 1;
+            *self.call_count.get_mut(&EAST).unwrap() += 1;
             Ok(())
         }
 
         fn go_north(&mut self) -> Result<(), Error> {
             debug!("go_north");
-            self.location.y += 1;
+            self.location.y -= 1;
+            *self.call_count.get_mut(&NORTH).unwrap() += 1;
             Ok(())
         }
 
         fn go_south(&mut self) -> Result<(), Error> {
             debug!("go_south");
-            self.location.y -= 1;
+            self.location.y += 1;
+            *self.call_count.get_mut(&SOUTH).unwrap() += 1;
             Ok(())
         }
 
         fn go_west(&mut self) -> Result<(), Error> {
             debug!("go_west");
             self.location.x -= 1;
+            *self.call_count.get_mut(&WEST).unwrap() += 1;
             Ok(())
         }
 
@@ -343,7 +361,16 @@ pub mod bot {
 
         fn scan_far(&self) -> Result<FarScanResult, Error> {
             debug!("scan far");
-            Err(Error::ScanFailed)
+            if !self.enable_error {
+                let mut scan = FarScanResult::new();
+                scan.insert(NORTH, 2);
+                scan.insert(EAST, 1);
+                scan.insert(SOUTH, 1);
+                scan.insert(WEST, 0);
+                Ok(scan)
+            } else {
+                Err(Error::ScanFailed)
+            }
         }
 
         fn reset(&mut self) -> Result<(), Error> {
@@ -352,11 +379,122 @@ pub mod bot {
             Ok(())
         }
     }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use Direction::{EAST, NORTH, SOUTH, WEST};
+
+    fn some_warehouse() -> Warehouse {
+        //     0 1 2
+        //    +-+-+-+
+        // 0  |     |
+        //    +     +
+        // 1  |     |   // no cell in the middle
+        //    +     +
+        // 2  |     |
+        //    +-+-+-+
+        //
+        let mut wh = Warehouse::default();
+        // Row 1
+        let mut cell = Cell::default();
+        cell.add_wall(&NORTH).expect("Should be able to add wall");
+        cell.add_wall(&WEST).expect("Should be able to add wall");
+        wh.insert_or_update_cell(Coords2D { x: 0, y: 0 }, cell);
+        let mut cell = Cell::default();
+        cell.add_wall(&NORTH).expect("Should be able to add wall");
+        wh.insert_or_update_cell(Coords2D { x: 1, y: 0 }, cell);
+        let mut cell = Cell::default();
+        cell.add_wall(&EAST).expect("Should be able to add wall");
+        cell.add_wall(&NORTH).expect("Should be able to add wall");
+        wh.insert_or_update_cell(Coords2D { x: 2, y: 0 }, cell);
+        // Row2
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&WEST);
+        wh.insert_or_update_cell(Coords2D { x: 0, y: 1 }, cell);
+        // let cell = Cell::default();
+        // wh.insert_or_update_cell(Coords2D { x: 1, y: 1 }, cell);
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&EAST);
+        wh.insert_or_update_cell(Coords2D { x: 2, y: 1 }, cell);
+        // Row 3
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&SOUTH);
+        _ = cell.add_wall(&WEST);
+        wh.insert_or_update_cell(Coords2D { x: 0, y: 2 }, cell);
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&SOUTH);
+        wh.insert_or_update_cell(Coords2D { x: 1, y: 2 }, cell);
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&SOUTH);
+        _ = cell.add_wall(&NORTH);
+        wh.insert_or_update_cell(Coords2D { x: 2, y: 2 }, cell);
+        wh
+    }
+
+    #[test]
+    fn test_move_bot() {
+        let wh = some_warehouse();
+        let mut bot = MockBot::default();
+        // Should not move west
+        assert!(move_bot_in_warehouse(&mut bot, &wh, WEST).is_err());
+        assert_eq!(bot.get_call_count().get(&WEST).unwrap(), &0);
+        // East should work
+        assert!(move_bot_in_warehouse(&mut bot, &wh, EAST).is_ok());
+        assert_eq!(bot.get_call_count().get(&EAST).unwrap(), &1);
+        assert_eq!(bot.locate(), Coords2D { x: 1, y: 0 });
+        // East should work
+        assert!(move_bot_in_warehouse(&mut bot, &wh, EAST).is_ok());
+        assert_eq!(bot.get_call_count().get(&EAST).unwrap(), &2);
+        assert_eq!(bot.locate(), Coords2D { x: 2, y: 0 });
+        // South should work
+        assert!(move_bot_in_warehouse(&mut bot, &wh, SOUTH).is_ok());
+        assert_eq!(bot.get_call_count().get(&SOUTH).unwrap(), &1);
+        assert_eq!(bot.locate(), Coords2D { x: 2, y: 1 });
+        // BAck North should work
+        assert!(move_bot_in_warehouse(&mut bot, &wh, NORTH).is_ok());
+        assert_eq!(bot.get_call_count().get(&NORTH).unwrap(), &1);
+        assert_eq!(bot.locate(), Coords2D { x: 2, y: 0 });
+        // West should work
+        assert!(move_bot_in_warehouse(&mut bot, &wh, WEST).is_ok());
+        assert_eq!(bot.get_call_count().get(&WEST).unwrap(), &1);
+        assert_eq!(bot.locate(), Coords2D { x: 1, y: 0 });
+    }
+
+    #[test]
+    fn test_update_warehouse() {
+        let mut wh = some_warehouse();
+        assert!(!wh
+            .get_cell(&Coords2D { x: 1, y: 0 })
+            .unwrap()
+            .has_wall(&SOUTH));
+        assert!(!wh
+            .get_cell(&Coords2D { x: 0, y: 1 })
+            .unwrap()
+            .has_wall(&EAST));
+        assert!(!wh
+            .get_cell(&Coords2D { x: 2, y: 1 })
+            .unwrap()
+            .has_wall(&WEST));
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&NORTH);
+        _ = cell.add_wall(&EAST);
+        _ = cell.add_wall(&WEST);
+        wh.insert_or_update_cell(Coords2D { x: 1, y: 1 }, cell);
+        // Neighbor cells should have been updated
+        assert!(wh
+            .get_cell(&Coords2D { x: 1, y: 0 })
+            .unwrap()
+            .has_wall(&SOUTH));
+        assert!(wh
+            .get_cell(&Coords2D { x: 0, y: 1 })
+            .unwrap()
+            .has_wall(&EAST));
+        assert!(wh
+            .get_cell(&Coords2D { x: 2, y: 1 })
+            .unwrap()
+            .has_wall(&WEST));
+        // Cell below should not have a north wall
+        assert!(!wh
+            .get_cell(&Coords2D { x: 2, y: 2 })
+            .unwrap()
+            .has_wall(&WEST));
+    }
 
     #[test]
     fn test_get_neighbor_coords_single_step() {
@@ -383,6 +521,32 @@ mod tests {
     }
 
     #[test]
+    fn test_update_from_far_scan(){
+        let mut wh = Warehouse::default();
+        let mut cell = Cell::default();
+        _ = cell.add_wall(&WEST);
+        let pos = Coords2D{x:0,y:0};
+        wh.insert_or_update_cell(pos.clone(), cell);
+        let mut scan = FarScanResult::new();
+        scan.insert(NORTH, 2);
+        scan.insert(EAST, 1);
+        scan.insert(SOUTH, 1);
+        scan.insert(WEST, 0);
+        
+        update_warehouse_from_scan_far(&mut wh, scan, &pos).unwrap();
+        assert!(wh.get_cell(&Coords2D { x: 0, y: -2 }).is_some());
+        assert!(wh.get_cell(&Coords2D { x: 0, y: -1 }).is_some());
+        assert!(!wh.get_cell(&Coords2D { x: 0, y: -1 }).unwrap().has_wall(&NORTH));
+        assert!(wh.get_cell(&Coords2D { x: 0, y: -2 }).unwrap().has_wall(&NORTH));
+
+        assert!(wh.get_cell(&Coords2D { x: 1, y: 0 }).is_some());
+        assert!(wh.get_cell(&Coords2D { x: 1, y: 0 }).unwrap().has_wall(&EAST));
+
+        assert!(wh.get_cell(&Coords2D { x: 0, y: 1 }).is_some());
+        assert!(wh.get_cell(&Coords2D { x: 0, y: 1 }).unwrap().has_wall(&SOUTH));
+    }
+
+    #[test]
     fn test_get_neighbor_coords_multi_step() {
         let pos = Coords2D { x: 1, y: -1 };
         let south = get_coords_in_direction(&pos, &SOUTH, Some(&2));
@@ -402,6 +566,20 @@ mod tests {
         let pos = Coords2D { x: 1, y: -1 };
         let south = get_coords_in_direction(&pos, &SOUTH, Some(&-3));
         assert!(south.is_err());
+    }
+
+    #[test]
+    fn test_get_north_west() {
+        let pos = Coords2D { x: 1, y: 1 };
+        assert_eq!(Coords2D::get_north_west(&pos), Coords2D::default());
+    }
+
+    #[test]
+    fn test_get_opposite_direction() {
+        assert_eq!(SOUTH, Direction::opposite(&NORTH));
+        assert_eq!(NORTH, Direction::opposite(&SOUTH));
+        assert_eq!(EAST, Direction::opposite(&WEST));
+        assert_eq!(WEST, Direction::opposite(&EAST));
     }
 
     #[test]

@@ -145,7 +145,7 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
                         side_walls.push_str("  "); // No wall and space
                     }
 
-                    let has_north_west = grid.contains_key(&get_nort_west_coors(&current_pos));
+                    let has_north_west = grid.contains_key(&Coords2D::get_north_west(&current_pos));
 
                     // Special Case for the corner crosses of &EAST-most, or freestanding cells
 
@@ -166,13 +166,6 @@ pub fn draw_warehouse(grid: &CellGrid, botlocation: Option<Coords2D>) -> String 
         s.push_str(&side_walls);
     }
     s
-}
-
-fn get_nort_west_coors(pos: &Coords2D) -> Coords2D {
-    Coords2D {
-        x: pos.x - 1,
-        y: pos.y - 1,
-    }
 }
 
 #[cfg(test)]
